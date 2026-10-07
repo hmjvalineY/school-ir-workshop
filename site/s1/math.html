@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Q3 數學偏低</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script src="../assets/js/common.js"></script>
+</head>
+<body data-root="../" data-lab="s1/math" data-time="約 8 分鐘"
+      data-lead="305、306 兩班的數學平均最低。在指責任何人之前，先看學生的起點：把「入學成績分組」拉進來。">
+<main class="wrap">
+  <div class="card stack">
+    <div class="row"><span class="small muted">看法</span>
+      <div class="seg" id="mode">
+        <button data-m="avg" aria-pressed="true">① 各班平均</button>
+        <button data-m="mix" aria-pressed="false">② 各班的學生組成</button>
+        <button data-m="strat" aria-pressed="false">③ 同一分組，跨班比較</button>
+      </div>
+      <span class="spacer"></span><span class="small muted">科目</span><div class="seg" id="subj"></div></div>
+  </div>
+  <div class="grid g3" style="margin-top:16px">
+    <div class="card" style="grid-column: span 2"><h3 id="t"></h3><div style="height:360px"><canvas id="ch"></canvas></div></div>
+    <div class="card stack"><div class="callout small" id="msg"></div><div id="tbl" class="tablewrap"></div></div>
+  </div>
+  <div class="callout navy" style="margin-top:16px"><p><strong>差異來自學生組成，不是教學。</strong>同一個入學分組的學生，在各班的數學表現其實相近；305、306 分數低，是因為這兩個班的 C 組學生佔了將近一半。</p>
+    <p class="small">樞紐分析：列＝班級，欄＝入學成績分組，值＝數學（平均）。少了「欄」那一步，結論就會錯。</p></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  W.chartDefaults();
+  const D = await W.json("s1.json");
+  const R = Object.fromEntries(D.roster.rows.map((r) => [r[0], r]));
+  const SUBJ = ["國文", "英文", "數學", "自然", "社會"];
+  let mode = "avg", subj = "數學";
+  const cls = [...new Set(D.roster.rows.map((r) => r[2]))].sort(), G = ["A", "B", "C"];
+  const GC = { A: W.color.purpleL, B: W.color.gray, C: W.color.orange };
+  const ch = new Chart(W.$("#ch"), { type: "bar", data: { labels: cls, datasets: [] }, options: { plugins: { legend: { position: "top" } } } });
+  function draw() {
+    W.$$("#mode button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.m === mode ? "true" : "false"));
+    W.$("#subj").replaceChildren(...SUBJ.map((s) => W.el("button", { "aria-pressed": s === subj, onclick: () => { subj = s; draw(); } }, s)));
+    const k = SUBJ.indexOf(subj) + 2;
+    const ex = D.exams.rows.map((r) => ({ c: R[r[0]][2], g: R[r[0]][4], v: r[k] }));
+    const avg = (f) => W.mean(ex.filter(f).map((e) => e.v));
+    let rows, cols;
+    if (mode === "avg") {
+      const v = cls.map((c) => avg((e) => e.c === c));
+      ch.data.datasets = [{ label: `${subj}平均`, data: v, backgroundColor: v.map((x) => (x < W.mean(v) - 2 ? W.color.orange : W.color.purpleL)) }];
+      ch.options.scales = { y: { suggestedMin: 55, suggestedMax: 75 }, x: { stacked: false } };
+      W.$("#t").textContent = `各班${subj}平均`;
+      W.$("#msg").innerHTML = "<strong>只看平均：</strong>305、306 明顯偏低。很容易就得出「這兩班老師教得不好」的結論。按 ② 看各班的學生組成。";
+      cols = ["班級", "平均"]; rows = cls.map((c, i) => [c, +v[i].toFixed(1)]);
+    } else if (mode === "mix") {
+      const n = (c, g) => D.roster.rows.filter((r) => r[2] === c && r[4] === g).length;
+      ch.data.datasets = G.map((g) => ({ label: g + " 組", data: cls.map((c) => (n(c, g) / D.roster.rows.filter((r) => r[2] === c).length) * 100), backgroundColor: GC[g] }));
+      ch.options.scales = { y: { stacked: true, max: 100, ticks: { callback: (v) => v + "%" } }, x: { stacked: true } };
+      W.$("#t").textContent = "各班的入學成績分組組成";
+      W.$("#msg").innerHTML = "<strong>組成不一樣：</strong>305、306 的 C 組學生將近一半，其他班只有個位數。起點不同，平均自然不同。按 ③ 比較同一組的學生。";
+      cols = ["班級", "A", "B", "C"]; rows = cls.map((c) => [c, n(c, "A"), n(c, "B"), n(c, "C")]);
+    } else {
+      ch.data.datasets = G.map((g) => ({ label: g + " 組", data: cls.map((c) => avg((e) => e.c === c && e.g === g)), backgroundColor: GC[g] }));
+      ch.options.scales = { y: { suggestedMin: 45, suggestedMax: 85 }, x: { stacked: false } };
+      W.$("#t").textContent = `同一入學分組，各班${subj}平均`;
+      const spread = G.map((g) => { const v = cls.map((c) => avg((e) => e.c === c && e.g === g)); return Math.max(...v) - Math.min(...v); });
+      W.$("#msg").innerHTML = `<strong>分層之後：</strong>同一組的學生在各班表現相近（各組班級間差距約 ${spread.map((x) => x.toFixed(0)).join("、")} 分；C 組人數少的班級波動較大）。305、306 的同組學生並沒有特別差。`;
+      cols = ["班級", "A", "B", "C"]; rows = cls.map((c) => [c, ...G.map((g) => +avg((e) => e.c === c && e.g === g).toFixed(1))]);
+    }
+    ch.update();
+    W.table(W.$("#tbl"), cols, rows, { rowClass: (i) => (["305", "306"].includes(rows[i][0]) ? "hl" : "") });
+  }
+  W.$$("#mode button").forEach((b) => (b.onclick = () => { mode = b.dataset.m; draw(); }));
+  draw();
+});
+</script>
+</body>
+</html>

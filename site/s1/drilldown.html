@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Q2 85% 的陷阱</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script src="../assets/js/common.js"></script>
+<style> .crumbs button { border: 0; background: none; color: var(--purple); cursor: pointer; font: inherit; padding: 0; text-decoration: underline; } </style>
+</head>
+<body data-root="../" data-lab="s1/drilldown" data-time="約 8 分鐘"
+      data-lead="學習歷程整體上傳率約 85%，看起來相當不錯——直到你把它拆開。選一個維度拆，點長條再往下鑽一層。">
+<main class="wrap">
+  <div class="card stack">
+    <div class="row"><span class="small muted">學期</span><div class="seg" id="term"></div></div>
+    <div class="row"><span class="small muted">拆解維度</span><div class="seg" id="dim"></div></div>
+    <div class="row crumbs small" id="crumbs"></div>
+  </div>
+  <div class="grid g3" style="margin-top:16px">
+    <div class="card stack">
+      <div class="stat"><b id="big"></b><span id="bigL"></span></div>
+      <div class="stat orange"><b id="low"></b><span>上傳率未滿 70% 的學生</span></div>
+      <div class="callout small" id="msg"></div>
+    </div>
+    <div class="card" style="grid-column: span 2">
+      <h3 id="chTitle"></h3>
+      <div style="height:330px"><canvas id="ch"></canvas></div>
+      <p class="small faint">上傳率＝實際上傳件數加總 ÷ 應上傳件數加總。虛線＝目前範圍的整體上傳率。點長條往下鑽。</p>
+    </div>
+  </div>
+  <div class="callout navy" style="margin-top:16px"><p><strong>真正需要協助的，是明確的一小群學生。</strong></p>
+    <p class="small">樞紐分析：列先放「入學成績分組」，再把「班級」拖到它下面；值＝實際上傳件數（加總）÷ 應上傳件數（加總）。整體的 85% 掩蓋了 C 組的 55%。</p></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  W.chartDefaults();
+  const D = await W.json("s1.json");
+  const R = Object.fromEntries(D.roster.rows.map((r) => [r[0], { 班級: r[2], 班群: r[3], 入學成績分組: r[4] }]));
+  const rows = D.lp.rows.map((r) => ({ id: r[0], term: r[1], need: r[2], up: r[3], ...R[r[0]] }));
+  const terms = ["全部", ...[...new Set(rows.map((r) => r.term))].sort()];
+  const DIMS = ["入學成績分組", "班級", "班群"];
+  let term = "全部", dim = "入學成績分組", path = [];   // path: [{dim, val}]
+  const ch = new Chart(W.$("#ch"), { type: "bar", data: { labels: [], datasets: [] }, options: {
+    scales: { y: { min: 0, max: 100, ticks: { callback: (v) => v + "%" } } }, plugins: { legend: { display: false },
+      tooltip: { callbacks: { label: (c) => `上傳率 ${c.raw.toFixed(1)}%（${ch._n[c.dataIndex]} 人）` } } },
+    onClick: (e, els) => { if (els.length) { const next = DIMS.find((d) => d !== dim && !path.some((p) => p.dim === d)); path.push({ dim, val: ch.data.labels[els[0].index] }); if (next) dim = next; draw(); } } },
+    plugins: [{ id: "avgline", afterDraw(c) { if (c._avg == null) return; const y = c.scales.y.getPixelForValue(c._avg), ctx = c.ctx; ctx.save(); ctx.setLineDash([5, 4]); ctx.strokeStyle = "#1F2A44";
+      ctx.beginPath(); ctx.moveTo(c.chartArea.left, y); ctx.lineTo(c.chartArea.right, y); ctx.stroke(); ctx.fillStyle = "#1F2A44"; ctx.fillText(`整體 ${c._avg.toFixed(1)}%`, c.chartArea.right - 70, y - 5); ctx.restore(); } }] });
+  function draw() {
+    W.$("#term").replaceChildren(...terms.map((t) => W.el("button", { "aria-pressed": t === term, onclick: () => { term = t; draw(); } }, t)));
+    W.$("#dim").replaceChildren(...DIMS.map((d) => W.el("button", { "aria-pressed": d === dim, disabled: path.some((p) => p.dim === d) || null, onclick: () => { dim = d; draw(); } }, d)));
+    const scope = rows.filter((r) => (term === "全部" || r.term === term) && path.every((p) => r[p.dim] === p.val));
+    const rate = (a) => (W.sum(a.map((r) => r.need)) ? (W.sum(a.map((r) => r.up)) / W.sum(a.map((r) => r.need))) * 100 : NaN);
+    const avg = rate(scope);
+    W.$("#crumbs").replaceChildren(W.el("span", { class: "muted" }, "目前範圍："), W.el("button", { onclick: () => { path = []; dim = "入學成績分組"; draw(); } }, "全校"),
+      ...path.flatMap((p, i) => [" ▸ ", W.el("button", { onclick: () => { path = path.slice(0, i + 1); draw(); } }, `${p.dim}＝${p.val}`)]));
+    W.$("#big").textContent = avg.toFixed(1) + "%";
+    W.$("#bigL").textContent = path.length ? `${path.map((p) => p.val).join("・")} 的上傳率` : "全校整體上傳率";
+    const byStu = {}; scope.forEach((r) => { const s = (byStu[r.id] = byStu[r.id] || { need: 0, up: 0, ...r }); s.need += r.need; s.up += r.up; });
+    const stus = Object.values(byStu), low = stus.filter((s) => s.up / s.need < 0.7);
+    W.$("#low").textContent = `${low.length} / ${stus.length} 人`;
+    const groups = [...new Set(scope.map((r) => r[dim]))].sort();
+    const vals = groups.map((g) => rate(scope.filter((r) => r[dim] === g)));
+    ch._n = groups.map((g) => new Set(scope.filter((r) => r[dim] === g).map((r) => r.id)).size);
+    ch._avg = avg;
+    ch.data.labels = groups;
+    ch.data.datasets = [{ data: vals, backgroundColor: vals.map((v) => (v < avg - 10 ? W.color.orange : v < avg ? W.color.orangeL : W.color.purpleL)) }];
+    ch.update();
+    W.$("#chTitle").textContent = `依「${dim}」拆開`;
+    const worst = groups[vals.indexOf(Math.min(...vals))];
+    const byCls = {}; stus.forEach((s) => (byCls[s.班級] = (byCls[s.班級] || 0) + 1));
+    const top2 = Object.entries(byCls).sort((a, b) => b[1] - a[1]).slice(0, 2);
+    const conc = path.length && dim !== "班級" ? "" : path.length ? `這 ${stus.length} 人中，<strong>${W.sum(top2.map((x) => x[1]))} 人集中在 ${top2.map((x) => x[0]).join("、")} 兩個班</strong>。` : "";
+    W.$("#msg").innerHTML = !path.length && dim === "入學成績分組" ? `整體 ${avg.toFixed(1)}%，但 <strong>${worst} 組只有 ${Math.min(...vals).toFixed(1)}%</strong>。點 ${worst} 組的長條往下鑽。`
+      : `最低的是 <strong>${worst}（${Math.min(...vals).toFixed(1)}%）</strong>。` + conc;
+  }
+  draw();
+});
+</script>
+</body>
+</html>

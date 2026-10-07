@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>小操作一</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script src="../assets/js/common.js"></script>
+<style>
+  #dict input, #dict select { padding: 4px 6px; font-size: .84rem; min-width: 110px; }
+  #dict td { vertical-align: top; white-space: normal; }
+  #dict td.warn { color: var(--orange); font-size: .8rem; min-width: 160px; }
+</style>
+</head>
+<body data-root="../" data-lab="s3/dictionary" data-time="約 10 分鐘"
+      data-lead="電腦先從資料推測每個欄位的型別、值域與可能問題；AI 可以幫忙起草定義；但定義只有學校能拍板。">
+<main class="wrap">
+  <div class="grid g2">
+    <div class="card stack">
+      <h3>1　選擇資料</h3>
+      <div class="row">
+        <button class="btn sm" id="useSample">使用範例：髒資料_學生學習</button>
+        <label class="btn sm ghost" style="cursor:pointer">上傳自己的 CSV／Excel
+          <input type="file" id="file" accept=".csv,.xlsx,.xls" hidden></label>
+      </div>
+      <p class="small faint">檔案只在你的瀏覽器裡讀取，不會上傳到任何地方。請只用模擬資料或已去識別化的資料。</p>
+      <p class="small" id="srcInfo"></p>
+    </div>
+    <div class="card stack">
+      <h3>2　讓 AI 起草定義</h3>
+      <p class="small">提示詞只包含<strong>欄位名稱與前 5 列</strong>，並要求 AI 對無法確定的地方標註「需確認」。</p>
+      <div class="row">
+        <button class="btn sm purple" id="copyPrompt" disabled>複製提示詞</button>
+        <button class="btn sm ghost" id="exportCsv" disabled>下載資料字典（CSV）</button>
+      </div>
+      <p class="small muted">各組任務：找出 AI 定義錯誤的欄位。提示：999、1131、1／2 這些值，AI 能猜對嗎？</p>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="row" style="margin-bottom:6px">
+      <h3 style="margin:0">3　資料字典（電腦推測＋人工填寫）</h3>
+      <span class="spacer"></span>
+      <span class="small faint">白色欄位可以直接改</span>
+    </div>
+    <div class="tablewrap" style="max-height:none">
+      <table class="data" id="dict"><tbody><tr><td class="muted">先選擇資料</td></tr></tbody></table>
+    </div>
+  </div>
+
+  <div class="callout purple" style="margin-top:16px">
+    <p><strong>資料字典的價值：逼大家把定義寫死。</strong></p>
+    <p class="small">同一個「缺曠」，教務處和學務處的算法可能不同。寫進字典、標明主責與最後更新日，人員異動時資料才不會變成謎。</p>
+  </div>
+</main>
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  let cols = [], rows = [], src = "";
+  const SENS = [
+    [/姓名|名字|出生|生日|地址|住址|電話|手機|身分證|email|信箱|家長|監護/i, "高"],
+    [/輔導|健康|特教|疾病|障礙|心理|家庭|低收|身障/, "高"],
+    [/學號|帳號|代號|座號|id/i, "中（識別碼）"],
+  ];
+  const OWNER = [
+    [/成績|國文|英文|數學|自然|社會|學期|選課|課程|學籍|班級|座號|入學/, "教務處"],
+    [/缺曠|出缺|遲到|獎懲|社團|曠課|假別/, "學務處"],
+    [/輔導|心理|生涯|特教/, "輔導室"],
+    [/健康|體適能|身高|體重|視力/, "學務處（健康中心）"],
+  ];
+  const guess = (name, list, dft) => { for (const [re, v] of list) if (re.test(name)) return v; return dft; };
+
+  function profile(j) {
+    const vals = rows.map((r) => r[j]);
+    const filled = vals.filter((v) => v !== null && v !== undefined && String(v).trim() !== "");
+    const nums = filled.map((v) => (typeof v === "number" ? v : Number(String(v).trim()))).filter((v) => !isNaN(v));
+    const distinct = [...new Set(filled.map((v) => String(v).trim()))];
+    const name = cols[j];
+    let type = "文字";
+    if (filled.length && nums.length / filled.length > 0.9) type = "數字";
+    if (filled.length && filled.every((v) => /^\d{2,4}[\/-]\d{1,2}[\/-]\d{1,2}$/.test(String(v).trim()))) type = "日期";
+    if (type !== "數字" && distinct.length <= 8) type = "代碼／類別";
+    const warn = [];
+    if (filled.length < vals.length) warn.push(`${vals.length - filled.length} 筆空白`);
+    if (type === "數字") {
+      const mn = Math.min(...nums), mx = Math.max(...nums);
+      if (/成績|國文|英文|數學|自然|社會|分數/.test(name) && (mn < 0 || mx > 100)) warn.push(`出現 0–100 以外的值（${mn}～${mx}）`);
+      if (nums.some((v) => v < 0) && !/成績|國文|英文|數學/.test(name)) warn.push("出現負數");
+    }
+    const shapes = new Set(filled.map((v) => String(v).trim().replace(/[0-9]/g, "9").replace(/[０-９]/g, "９")));
+    if (type !== "數字" && type !== "文字" && shapes.size > 1 && distinct.length <= 8 && /\d/.test(distinct.join(""))) {
+      const ex = distinct.slice(0, 4).join("、");
+      warn.push(`寫法不一致：${ex}`);
+    }
+    if (/性別/.test(name) && distinct.some((v) => /^[0-9]$/.test(v)) && distinct.some((v) => /[男女]/.test(v))) warn.push("代碼與文字混用（1／2 與 男／女）");
+    if (/學年學期|^學期$/.test(name) && distinct.length > 1) warn.push(`學期寫法：${distinct.join("、")}`);
+    const ids = filled.map((v) => String(v).trim());
+    if (/學號|代號/.test(name) && new Set(ids).size < ids.length) warn.push(`${ids.length - new Set(ids).size} 個重複值`);
+    let range = "";
+    if (type === "數字") range = `${Math.min(...nums)} ～ ${Math.max(...nums)}`;
+    else if (type === "代碼／類別") range = distinct.join("、");
+    else if (type === "日期") range = `${distinct.sort()[0]} ～ ${distinct.sort().slice(-1)[0]}`;
+    else range = `${distinct.length} 種不同值`;
+    return { name, type, range, fill: filled.length / Math.max(1, vals.length), sample: distinct.slice(0, 3).join("、"),
+      sens: guess(name, SENS, "低"), owner: guess(name, OWNER, "需確認"), warn };
+  }
+
+  function render() {
+    const P = cols.map((_, j) => profile(j));
+    const t = W.$("#dict");
+    const opt = (list, v) => list.map((x) => `<option${x === v ? " selected" : ""}>${x}</option>`).join("");
+    t.innerHTML = "<thead><tr><th>欄位</th><th>推測型別</th><th>值域／類別</th><th>非空</th><th>範例</th><th>定義（人工填寫）</th><th>主責處室</th><th>敏感等級</th><th>維護人</th><th>電腦發現的疑點</th></tr></thead><tbody>" +
+      P.map((p, j) => `<tr data-j="${j}"><td><strong>${W.esc(p.name)}</strong></td><td>${p.type}</td><td style="max-width:220px;white-space:normal">${W.esc(p.range)}</td>
+        <td class="num">${W.pct(p.fill, 0)}</td><td>${W.esc(p.sample)}</td>
+        <td><input type="text" data-k="def" placeholder="需確認"></td>
+        <td><select data-k="owner">${opt(["需確認", "教務處", "學務處", "輔導室", "學務處（健康中心）", "總務處", "人事室", "會計室", "秘書"], p.owner)}</select></td>
+        <td><select data-k="sens">${opt(["低", "中（識別碼）", "高"], p.sens)}</select></td>
+        <td><input type="text" data-k="keeper" placeholder="姓名或職稱"></td>
+        <td class="warn">${p.warn.map(W.esc).join("<br>") || "<span class='faint'>—</span>"}</td></tr>`).join("") + "</tbody>";
+    W.$("#copyPrompt").disabled = W.$("#exportCsv").disabled = false;
+    W._profiles = P;
+  }
+
+  function setData(c, r, label) {
+    cols = c.map((x) => String(x ?? "").trim()); rows = r; src = label;
+    W.$("#srcInfo").textContent = `${label}：${cols.length} 個欄位、${rows.length} 列`;
+    render();
+  }
+
+  W.$("#useSample").onclick = async () => {
+    const d = await W.json("s3.json");
+    setData(d.columns, d.dirty.map((x) => d.columns.map((c) => x[c])), "治理研習_髒資料_學生學習");
+  };
+  W.$("#file").onchange = async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    try {
+      if (!window.XLSX) await new Promise((ok, no) => { const s = document.createElement("script");
+        s.src = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"; s.onload = ok; s.onerror = no; document.head.append(s); });
+      const buf = await f.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array", codepage: 950 });
+      const aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: null });
+      const hi = aoa.findIndex((r) => r.filter((v) => v !== null && v !== "").length >= Math.max(2, (aoa[0] || []).length * 0.5));
+      setData(aoa[hi], aoa.slice(hi + 1).filter((r) => r.some((v) => v !== null && v !== "")), f.name);
+    } catch (err) { W.toast("讀取失敗：" + err.message); }
+  };
+  W.$("#copyPrompt").onclick = () => {
+    const head = cols.join(",");
+    const sample = rows.slice(0, 5).map((r) => r.map((v) => v ?? "").join(",")).join("\n");
+    W.copy(`以下是某高中「${src}」的欄位名稱與前 5 列資料（CSV）：\n${head}\n${sample}\n\n請依這份資料產出資料字典，每個欄位包含：中文名稱、推測定義、型別、值域、可能的主責處室、敏感等級（高／中／低）。無法確定的地方請標註「需確認」，不要自行猜測。`,
+      "已複製提示詞");
+  };
+  W.$("#exportCsv").onclick = () => {
+    const H = ["欄位", "推測型別", "值域／類別", "非空比例", "定義", "主責處室", "敏感等級", "維護人", "疑點", "最後更新"];
+    const today = new Date().toISOString().slice(0, 10);
+    const lines = [H.join(",")].concat(W.$$("#dict tbody tr").map((tr) => {
+      const p = W._profiles[+tr.dataset.j], v = (k) => tr.querySelector(`[data-k=${k}]`).value || (k === "def" ? "需確認" : "");
+      return [p.name, p.type, p.range, W.pct(p.fill, 0), v("def"), v("owner"), v("sens"), v("keeper"), p.warn.join("；"), today]
+        .map((x) => `"${String(x).replace(/"/g, '""')}"`).join(",");
+    }));
+    W.download("資料字典_" + src.replace(/\.\w+$/, "") + ".csv", lines.join("\n"), "text/csv");
+  };
+});
+</script>
+</body>
+</html>

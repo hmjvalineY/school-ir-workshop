@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>問題卡</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script src="../assets/js/common.js"></script>
+<style>
+  .f { display: grid; grid-template-columns: 130px 1fr; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line-2); align-items: start; }
+  .f > label { font-weight: 700; color: var(--navy); }
+  .f > label small { display: block; font-weight: 400; color: var(--faint); }
+  .mchk { display: inline-flex; gap: 4px; align-items: center; margin: 2px 10px 2px 0; font-size: .9rem; }
+  .why { display: grid; grid-template-columns: 36px 1fr 1fr 1fr; gap: 8px; align-items: center; margin: 6px 0; }
+  .why b { width: 28px; height: 28px; border-radius: 50%; background: var(--navy); color: #fff; display: grid; place-items: center; font-size: .85rem; }
+  .why:last-child b { background: var(--purple); }
+  @media (max-width: 700px) { .f { grid-template-columns: 1fr; } .why { grid-template-columns: 30px 1fr; } .why input:nth-of-type(n+2) { grid-column: 2; } }
+</style>
+</head>
+<body data-root="../" data-lab="s0/card" data-time="8 分鐘"
+      data-lead="各組依所屬處室，從 50 題選 1 題，或寫下學校真實遇到的問題，用五步拆解；需要時再用「五個為什麼」往下問到根因。內容只存在你的瀏覽器。">
+<main class="wrap">
+  <div class="card">
+    <div class="row noprint" style="margin-bottom:8px">
+      <select id="pick" style="max-width:420px"><option value="">從 50 題帶入（選填）</option></select>
+      <span class="spacer"></span>
+      <button class="btn sm" id="dl">下載文字檔</button>
+      <button class="btn sm ghost" onclick="print()">列印</button>
+      <button class="btn sm ghost" id="clear">清空</button>
+    </div>
+    <div class="row"><h2 style="margin:0">問題卡</h2><span class="spacer"></span>
+      <input type="text" data-k="group" placeholder="組別" style="width:120px"><input type="text" data-k="office" placeholder="處室" style="width:140px"></div>
+    <div class="f"><label>現象<small>發生了什麼？用數字描述</small></label><textarea data-k="scene"></textarea></div>
+    <div class="f"><label>關鍵提問<small>有比較對象、有範圍、能導向行動</small></label><textarea data-k="q" style="min-height:60px"></textarea></div>
+    <div class="f"><label>要看的數據<small>資料項目｜來源處室或系統</small></label>
+      <div><textarea data-k="data"></textarea>
+        <label class="mchk"><input type="checkbox" data-k="link"> 需要跟其他處室要資料</label>
+        <label class="mchk"><input type="checkbox" data-k="pii"> 涉及敏感個資</label></div></div>
+    <div class="f"><label>分析方法</label><div id="methods"></div></div>
+    <div class="f"><label>可能根因<small>待驗證的假設</small></label><textarea data-k="causes"></textarea></div>
+    <div class="f"><label>決策與行動<small>誰、做什麼、何時檢視成效</small></label><textarea data-k="actions"></textarea></div>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0">五個為什麼</h2>
+    <p class="small muted">每一層的答案都要有資料支持；問到「機制」層，才是能改的根因。（範例見開場模組案例三：報到率下降）</p>
+    <div class="why small muted" style="font-weight:700"><span></span><span>為什麼？</span><span>發現</span><span>用到的資料</span></div>
+    <div id="whys"></div>
+  </div>
+</main>
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  const D = await W.json("s0.json");
+  const KEY = "ir-problem-card";
+  const M = D.methods, MO = D.method_order;
+  W.$("#methods").replaceChildren(...MO.map((k) => W.el("label", { class: "mchk" }, W.el("input", { type: "checkbox", "data-m": k }), M[k].name)));
+  W.$("#whys").replaceChildren(...[1, 2, 3, 4, 5].map((n) => W.el("div", { class: "why" }, W.el("b", {}, n),
+    W.el("input", { type: "text", "data-w": `${n}q`, placeholder: n === 1 ? "為什麼報到率下降？" : "為什麼？" }),
+    W.el("input", { type: "text", "data-w": `${n}a`, placeholder: "發現" }),
+    W.el("input", { type: "text", "data-w": `${n}d`, placeholder: "資料" }))));
+  D.questions.forEach((q) => W.$("#pick").append(W.el("option", { value: q.id }, `Q${String(q.id).padStart(2, "0")} ${q.t}`)));
+  const fields = () => W.$$("[data-k],[data-m],[data-w]");
+  const save = () => { const o = {}; fields().forEach((e) => { const k = e.dataset.k || "m:" + (e.dataset.m || "") + (e.dataset.w ? "w:" + e.dataset.w : "");
+    o[k] = e.type === "checkbox" ? e.checked : e.value; }); try { localStorage.setItem(KEY, JSON.stringify(o)); } catch (e) {} };
+  const loadSaved = () => { try { const o = JSON.parse(localStorage.getItem(KEY)); if (!o) return; fields().forEach((e) => {
+    const k = e.dataset.k || "m:" + (e.dataset.m || "") + (e.dataset.w ? "w:" + e.dataset.w : ""); if (k in o) e.type === "checkbox" ? (e.checked = o[k]) : (e.value = o[k]); }); } catch (e) {} };
+  const set = (k, v) => { const e = W.$(`[data-k=${k}]`); e.type === "checkbox" ? (e.checked = v) : (e.value = v); };
+  function fill(id) {
+    const q = D.questions.find((x) => x.id === +id); if (!q) return;
+    set("scene", q.scene); set("q", q.q); set("data", q.data.map(([a, b]) => `${a}｜${b}`).join("\n"));
+    set("link", q.link); set("pii", q.pii);
+    set("causes", q.causes.join("\n")); set("actions", q.actions.join("\n"));
+    if (!W.$("[data-k=office]").value) set("office", D.domains[q.d].owner);
+    W.$$("[data-m]").forEach((e) => (e.checked = q.m.includes(e.dataset.m)));
+    save(); W.toast("已帶入 Q" + q.id + "，請改成你們學校的情況");
+  }
+  loadSaved();
+  document.addEventListener("input", save);
+  W.$("#pick").onchange = (e) => e.target.value && fill(e.target.value);
+  const pre = new URLSearchParams(location.search).get("q");
+  if (pre) { W.$("#pick").value = pre; fill(pre); }
+  W.$("#clear").onclick = () => { if (confirm("清空整張卡？")) { fields().forEach((e) => (e.type === "checkbox" ? (e.checked = false) : (e.value = ""))); save(); } };
+  W.$("#dl").onclick = () => {
+    const v = (k) => W.$(`[data-k=${k}]`).value.trim() || "（未填）";
+    const ms = W.$$("[data-m]").filter((e) => e.checked).map((e) => M[e.dataset.m].name).join("、") || "（未選）";
+    const whys = [1, 2, 3, 4, 5].map((n) => { const g = (x) => W.$(`[data-w="${n}${x}"]`).value.trim(); return g("q") ? `${n}. ${g("q")} → ${g("a") || "?"}（資料：${g("d") || "?"}）` : ""; }).filter(Boolean);
+    const text = [`問題卡　組別：${v("group")}　處室：${v("office")}`, "", "【現象】", v("scene"), "", "【關鍵提問】", v("q"), "", "【要看的數據】", v("data"),
+      `需跨處室：${W.$("[data-k=link]").checked ? "是" : "否"}　涉及敏感個資：${W.$("[data-k=pii]").checked ? "是" : "否"}`, "", "【分析方法】", ms, "",
+      "【可能根因】", v("causes"), "", "【決策與行動】", v("actions"), "", "【五個為什麼】", ...(whys.length ? whys : ["（未填）"])].join("\n");
+    W.download(`問題卡_${W.$("[data-k=group]").value || "未命名"}.txt`, text);
+  };
+});
+</script>
+</body>
+</html>

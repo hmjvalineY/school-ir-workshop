@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>案例二</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script src="../assets/js/common.js"></script>
+<style>
+  .spark { display: inline-flex; gap: 2px; align-items: flex-end; height: 22px; vertical-align: middle; }
+  .spark i { width: 6px; background: var(--faint); border-radius: 1px; display: block; }
+  .spark i.hi { background: var(--orange); }
+</style>
+</head>
+<body data-root="../" data-lab="s0/alert" data-time="約 8 分鐘"
+      data-lead="用「去年」200 位學生、8 週的出缺勤資料回測規則：名單抓到的人，後來真的長期缺曠了嗎？真正長期缺曠的人，名單抓到了幾個？（模擬資料）">
+<main class="wrap">
+  <div class="grid g3">
+    <div class="card stack">
+      <h3>預警規則（符合任一條即列入）</h3>
+      <div><label class="field">① 近 4 週曠課 ≥ <span id="xV"></span> 節</label><input type="range" id="x" min="4" max="24" value="10"></div>
+      <div><label class="field">② 連續 ≥ <span id="yV"></span> 日整天未到校</label><input type="range" id="y" min="1" max="6" value="3"></div>
+      <label class="small"><input type="checkbox" id="z" checked> ③ 曠課節數連續 3 週上升</label>
+      <hr style="border:0;border-top:1px solid var(--line-2);width:100%">
+      <div><label class="field">導師可以負荷的名單人數：<span id="capV"></span> 人</label><input type="range" id="cap" min="5" max="80" value="45"></div>
+    </div>
+    <div class="card" style="grid-column: span 2">
+      <div class="grid g4" id="stats"></div>
+      <div class="callout small" id="msg" style="margin-top:12px"></div>
+      <div style="height:230px;margin-top:10px"><canvas id="ch"></canvas></div>
+      <p class="small faint">折線：只調整規則①的閾值時，命中率與涵蓋率怎麼變；直線是目前的設定。</p>
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div class="row" style="margin-bottom:8px"><h3 style="margin:0">名單</h3><span class="spacer"></span>
+      <label class="small"><input type="checkbox" id="showOut"> 顯示「後來的結果」</label></div>
+    <div class="tablewrap" id="tbl"></div>
+  </div>
+  <div class="callout purple" style="margin-top:16px"><p><strong>閾值是資源與風險的取捨。</strong>調低會多抓到人，但導師要聯繫的名單也變長；這個決定由人做，不由系統做。上線後每四週回頭檢視一次。</p></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  W.chartDefaults();
+  let s = 20261027;
+  const r = () => { s |= 0; s = (s + 0x6D2B79F5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  // ---------- 產生 200 位學生、40 個上課日 ----------
+  const N = 200, DAYS = 40;
+  // 三種學生：逐漸惡化（10%）、某一週家裡有事暫時缺課（10%）、一般（80%）
+  const S = Array.from({ length: N }, (_, i) => {
+    const u = r(), risky = u < 0.1, temp = !risky && u < 0.2, k = 0.5 + r(), bw = 4 + Math.floor(r() * 4);
+    const day = [], full = [];
+    for (let d = 0; d < DAYS; d++) {
+      let p = risky ? 0.03 + 0.32 * Math.pow(d / DAYS, 2) * k : 0.035;
+      if (temp && Math.floor(d / 5) === bw) p = 0.8;
+      let v = 0, f = false;
+      if (r() < p) { f = (risky || temp) && r() < 0.55; v = f ? 7 : 1 + Math.floor(r() * 3); }
+      day.push(v); full.push(f);
+    }
+    const week = Array.from({ length: 8 }, (_, w) => day.slice(w * 5, w * 5 + 5).reduce((a, b) => a + b, 0));
+    let run = 0, maxRun = 0;
+    full.slice(20).forEach((f) => { run = f ? run + 1 : 0; maxRun = Math.max(maxRun, run); });
+    const last4 = week.slice(4).reduce((a, b) => a + b, 0);
+    const rising = week[5] < week[6] && week[6] < week[7] && week[7] >= 3;
+    const outcome = risky ? r() < 0.8 : r() < 0.01;
+    return { id: "S" + String(i + 1).padStart(3, "0"), week, last4, maxRun, rising, outcome };
+  });
+  const actual = S.filter((x) => x.outcome).length;
+  const ch = new Chart(W.$("#ch"), { type: "line", data: { labels: [], datasets: [] },
+    options: { scales: { y: { min: 0, max: 100, ticks: { callback: (v) => v + "%" } }, x: { title: { display: true, text: "規則① 閾值（節）" } } },
+      plugins: { legend: { position: "top" } } } });
+  const evalRule = (X, Y, Z) => {
+    const f = S.filter((x) => x.last4 >= X || x.maxRun >= Y || (Z && x.rising));
+    const tp = f.filter((x) => x.outcome).length;
+    return { f, tp, prec: f.length ? tp / f.length : NaN, rec: tp / actual };
+  };
+  function upd() {
+    const X = +W.$("#x").value, Y = +W.$("#y").value, Z = W.$("#z").checked, cap = +W.$("#cap").value;
+    W.$("#xV").textContent = X; W.$("#yV").textContent = Y; W.$("#capV").textContent = cap;
+    const e = evalRule(X, Y, Z);
+    const stat = (cls, n, l) => W.el("div", { class: "stat " + cls }, W.el("b", {}, n), W.el("span", {}, l));
+    W.$("#stats").replaceChildren(stat(e.f.length > cap ? "orange" : "", e.f.length, "名單人數"), stat("green", W.pct(e.prec, 0), `命中率（${e.tp}/${e.f.length}）`),
+      stat("purple", W.pct(e.rec, 0), `涵蓋率（${e.tp}/${actual}）`), stat("", actual - e.tp, "漏網的學生"));
+    W.$("#msg").innerHTML = e.f.length > cap ? `<strong>名單 ${e.f.length} 人，超過導師能負荷的 ${cap} 人。</strong>誤報太多，導師會疲乏、開始忽略名單。`
+      : e.rec < 0.6 ? `<strong>漏掉 ${actual - e.tp} 位後來真的長期缺曠的學生。</strong>可以調低閾值，或加上「逐週上升」規則。`
+      : `<strong>名單 ${e.f.length} 人，抓到 ${e.tp} / ${actual} 位。</strong>在導師能負荷的範圍內，這是一個可以試行的規則。`;
+    const xs = Array.from({ length: 21 }, (_, i) => i + 4);
+    const sweep = xs.map((x) => evalRule(x, Y, Z));
+    ch.data.labels = xs;
+    ch.data.datasets = [
+      { label: "命中率", data: sweep.map((v) => v.prec * 100), borderColor: W.color.green, backgroundColor: W.color.green, tension: .25, pointRadius: xs.map((x) => (x === X ? 6 : 0)) },
+      { label: "涵蓋率", data: sweep.map((v) => v.rec * 100), borderColor: W.color.purple, backgroundColor: W.color.purple, tension: .25, pointRadius: xs.map((x) => (x === X ? 6 : 0)) },
+    ];
+    ch.update();
+    const show = W.$("#showOut").checked;
+    const rows = e.f.sort((a, b) => b.last4 - a.last4).map((x) => [x.id, x.last4, x.maxRun, x.rising ? "是" : "", x.week.join("・"), show ? (x.outcome ? "✓ 長期缺曠" : "—") : "？"]);
+    W.table(W.$("#tbl"), ["代號", "近 4 週曠課", "連續整天未到", "逐週上升", "8 週曠課節數", "後來的結果"], rows,
+      { rowClass: (i) => (show && e.f[i].outcome ? "hl" : "") });
+  }
+  ["x", "y", "z", "cap", "showOut"].forEach((id) => W.$("#" + id).addEventListener("input", upd));
+  upd();
+});
+</script>
+</body>
+</html>

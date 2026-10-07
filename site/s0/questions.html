@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>50 問瀏覽器</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script src="../assets/js/common.js"></script>
+<style>
+  .qcard { cursor: pointer; display: flex; flex-direction: column; gap: 6px; }
+  .qcard:hover { border-color: var(--navy); }
+  .qno { font-weight: 700; color: var(--orange); font-variant-numeric: tabular-nums; }
+  .filters { display: grid; gap: 10px; }
+  .filters .seg button { padding: 5px 10px; }
+  .modal h2 { margin-top: 0; }
+  .detail dt { font-weight: 700; color: var(--navy); margin-top: 12px; font-size: .9rem; }
+  .detail dd { margin: 4px 0 0; }
+  .detail ol, .detail ul { margin: 4px 0; padding-left: 1.3em; }
+</style>
+</head>
+<body data-root="../" data-lab="s0/questions"
+      data-lead="十個面向、五十個常見現象。每一題都依五步展開：現象 → 提問 → 數據 → 分析 → 根因與決策。點卡片看詳細內容。">
+<main class="wrap">
+  <div class="card filters">
+    <div class="row"><input type="text" id="q" placeholder="搜尋：例如 缺曠、選修、報到率" style="flex:1;min-width:200px">
+      <button class="btn sm orange" id="rand">隨機抽一題</button><span class="small muted" id="count"></span></div>
+    <div class="row"><span class="small muted" style="width:3.5em">面向</span><div class="seg" id="fd"></div></div>
+    <div class="row"><span class="small muted" style="width:3.5em">方法</span><div class="seg" id="fm"></div></div>
+    <div class="row"><span class="small muted" style="width:3.5em">條件</span><div class="seg" id="fx"></div></div>
+  </div>
+  <div class="grid g3" id="list" style="margin-top:16px"></div>
+  <div class="overlay" id="ov"><div class="modal" id="md"></div></div>
+</main>
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  const D = await W.json("s0.json");
+  const Q = D.questions, DOM = D.domains, M = D.methods, MO = D.method_order;
+  const st = { d: -1, m: "", x: "", q: "" };
+  const seg = (box, items, key) => {
+    box.replaceChildren(...items.map(([v, label]) => W.el("button", { "aria-pressed": st[key] === v, onclick: () => { st[key] = st[key] === v && v !== -1 && v !== "" ? (key === "d" ? -1 : "") : v; draw(); } }, label)));
+  };
+  const tags = (q) => [
+    ...["預警", "決策"].filter((x) => q.lv.includes(x)).map((x) => W.el("span", { class: "chip " + (x === "預警" ? "solid-orange" : "solid-purple") }, x)),
+    ...q.m.map((k) => W.el("span", { class: "chip green" }, M[k].name)),
+    q.link ? W.el("span", { class: "chip green", title: "需跨處室串接" }, "跨處室") : null,
+    q.pii ? W.el("span", { class: "chip orange", title: "涉及敏感個資" }, "敏感個資") : null];
+  function match(q) {
+    if (st.d >= 0 && q.d !== st.d) return false;
+    if (st.m && !q.m.includes(st.m)) return false;
+    if (st.x === "預警" && !q.lv.includes("預警")) return false;
+    if (st.x === "決策" && !q.lv.includes("決策")) return false;
+    if (st.x === "跨處室" && !q.link) return false;
+    if (st.x === "敏感" && !q.pii) return false;
+    if (st.q) { const s = [q.t, q.scene, q.q, q.short, ...q.causes, ...q.actions, ...q.data.flat()].join(" "); if (!s.includes(st.q)) return false; }
+    return true;
+  }
+  function draw() {
+    seg(W.$("#fd"), [[-1, "全部"], ...DOM.map((d, i) => [i, d.name])], "d");
+    seg(W.$("#fm"), [["", "全部"], ...MO.map((k) => [k, M[k].name])], "m");
+    seg(W.$("#fx"), [["", "全部"], ["預警", "預警"], ["決策", "決策"], ["跨處室", "需跨處室"], ["敏感", "敏感個資"]], "x");
+    const hits = Q.filter(match);
+    W.$("#count").textContent = `${hits.length} / ${Q.length} 題`;
+    W.$("#list").replaceChildren(...hits.map((q) => W.el("div", { class: "card qcard", onclick: () => open(q) },
+      W.el("div", { class: "row" }, W.el("span", { class: "qno" }, "Q" + String(q.id).padStart(2, "0")), W.el("span", { class: "small muted" }, DOM[q.d].name)),
+      W.el("h3", { style: "margin:0" }, q.t),
+      W.el("p", { class: "small muted", style: "margin:0" }, q.q),
+      W.el("div", { class: "row", style: "gap:4px" }, tags(q)))));
+    if (!hits.length) W.$("#list").append(W.el("p", { class: "muted" }, "沒有符合的題目。"));
+  }
+  function open(q) {
+    const md = W.$("#md");
+    md.replaceChildren(
+      W.el("button", { class: "close", onclick: () => W.$("#ov").classList.remove("open") }, "×"),
+      W.el("div", { class: "small muted" }, `面向：${DOM[q.d].name}（主責：${DOM[q.d].owner}）`),
+      W.el("h2", {}, W.el("span", { class: "qno" }, "Q" + String(q.id).padStart(2, "0") + "　"), q.t),
+      W.el("div", { class: "row", style: "gap:4px" }, tags(q)),
+      W.el("dl", { class: "detail" },
+        W.el("dt", {}, "現象"), W.el("dd", {}, q.scene),
+        W.el("dt", {}, "關鍵提問"), W.el("dd", { style: "color:var(--purple);font-weight:600" }, q.q),
+        W.el("dt", {}, "要看的數據"), W.el("dd", {}, W.el("ul", {}, q.data.map(([a, b]) => W.el("li", {}, a, W.el("span", { class: "muted small" }, "｜" + b))))),
+        W.el("dt", {}, "分析步驟"), W.el("dd", {}, W.el("ol", {}, q.steps.map((s) => W.el("li", {}, s)))),
+        W.el("dt", {}, "可能根因（待驗證的假設）"), W.el("dd", {}, W.el("ul", {}, q.causes.map((s) => W.el("li", {}, s)))),
+        W.el("dt", {}, "決策與行動"), W.el("dd", {}, W.el("ul", {}, q.actions.map((s) => W.el("li", {}, s)))),
+        q.caution ? W.el("div", { class: "callout orange small", style: "margin-top:12px" }, W.el("strong", {}, "注意　"), q.caution) : null),
+      W.el("div", { class: "row", style: "margin-top:14px" },
+        W.el("a", { class: "btn sm", href: "card.html?q=" + q.id }, "用這題填問題卡"),
+        W.el("button", { class: "btn sm ghost", onclick: () => { const i = Q.findIndex((x) => x.id === q.id); open(Q[(i + 1) % Q.length]); } }, "下一題 →")));
+    W.$("#ov").classList.add("open");
+    md.scrollTop = 0;
+  }
+  W.$("#ov").onclick = (e) => { if (e.target.id === "ov") W.$("#ov").classList.remove("open"); };
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") W.$("#ov").classList.remove("open"); });
+  W.$("#q").oninput = (e) => { st.q = e.target.value.trim(); draw(); };
+  W.$("#rand").onclick = () => open(Q[Math.floor(Math.random() * Q.length)]);
+  const pre = new URLSearchParams(location.search).get("q");
+  draw();
+  if (pre) { const q = Q.find((x) => x.id === +pre); if (q) open(q); }
+});
+</script>
+</body>
+</html>

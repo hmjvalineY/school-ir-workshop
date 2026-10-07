@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>小操作四</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script src="../assets/js/common.js"></script>
+</head>
+<body data-root="../" data-lab="s3/regression" data-time="約 10 分鐘"
+      data-lead="600 位模擬學生考兩次段考。第一次考後 25% 的學生「參加補救」——但補救的真實效果預設是 0 分。猜猜看，他們第二次會不會進步？">
+<main class="wrap">
+  <div class="grid g3">
+    <div class="card stack">
+      <h3>實驗設定</h3>
+      <div><label class="field">補救教學的真實效果：<span id="effV"></span> 分</label><input type="range" id="eff" min="0" max="10" step="1" value="0"></div>
+      <div><label class="field">測驗的隨機誤差（運氣成分）：±<span id="noiseV"></span> 分</label><input type="range" id="noise" min="0" max="15" step="1" value="8"></div>
+      <div><label class="field">參加補救的比例：後 <span id="cutV"></span>%</label><input type="range" id="cut" min="10" max="50" step="5" value="25"></div>
+      <div class="row"><button class="btn sm" id="again">重新抽一批學生</button>
+        <label class="small"><input type="checkbox" id="ctrl"> 加上隨機對照組</label></div>
+    </div>
+    <div class="card" style="grid-column: span 2">
+      <div class="grid g3" id="stats"></div>
+      <div class="callout orange small" id="msg" style="margin-top:12px"></div>
+    </div>
+  </div>
+  <div class="grid g2" style="margin-top:16px">
+    <div class="card"><h3>第一次 vs. 第二次段考</h3><div style="height:360px"><canvas id="sc"></canvas></div>
+      <p class="small faint">對角線上＝兩次一樣。橘點＝參加補救的學生。</p></div>
+    <div class="card"><h3>各組平均的變化</h3><div style="height:360px"><canvas id="bar"></canvas></div>
+      <p class="small faint">前段學生第二次「退步」，同樣是均值回歸。</p></div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <h3>小操作四：請 AI 分析，再追問漏洞</h3>
+    <ol class="steps small">
+      <li>按「複製資料」把模擬結果貼給 AI，請它分析補救前後的成績變化並畫圖。</li>
+      <li>接著追問：「這個結論有什麼漏洞？還需要哪些資料？」</li>
+      <li>看 AI 能不能自己想到：極端分數的自然回歸、自願參加的動機差異、同期其他措施。</li>
+    </ol>
+    <div class="row"><button class="btn sm purple" id="copy">複製資料＋第一個提示詞</button>
+      <button class="btn sm ghost" id="copy2">複製追問提示詞</button></div>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  W.chartDefaults();
+  let seed = 7;
+  const rng = (s) => () => { s |= 0; s = (s + 0x6D2B79F5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const gauss = (r) => { let u = 0, v = 0; while (!u) u = r(); while (!v) v = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+  const clip = (x) => Math.max(0, Math.min(100, Math.round(x)));
+  let S = [];
+  const sc = new Chart(W.$("#sc"), { type: "scatter", data: { datasets: [] },
+    options: { scales: { x: { min: 20, max: 100, title: { display: true, text: "第一次段考" } }, y: { min: 20, max: 100, title: { display: true, text: "第二次段考" } } },
+      plugins: { legend: { position: "bottom" } } } });
+  const bar = new Chart(W.$("#bar"), { type: "bar", data: { labels: [], datasets: [] },
+    options: { scales: { y: { min: 30, max: 90, title: { display: true, text: "平均分數" } } }, plugins: { legend: { position: "bottom" } } } });
+
+  function run() {
+    const eff = +W.$("#eff").value, noise = +W.$("#noise").value, cut = +W.$("#cut").value / 100, useCtrl = W.$("#ctrl").checked;
+    W.$("#effV").textContent = eff; W.$("#noiseV").textContent = noise; W.$("#cutV").textContent = Math.round(cut * 100);
+    const r = rng(seed);
+    S = Array.from({ length: 600 }, (_, i) => { const a = 65 + 12 * gauss(r); return { id: "S" + String(i + 1).padStart(3, "0"), a, t1: clip(a + noise * gauss(r)), e2: noise * gauss(r), coin: r() < 0.5 }; });
+    const sorted = [...S].sort((x, y) => x.t1 - y.t1);
+    const thr = sorted[Math.floor(S.length * cut) - 1].t1;
+    S.forEach((s) => { s.low = s.t1 <= thr; });
+    // 對照組：把後段學生依第一次成績排序後交錯分派（分層隨機），兩組起點才會相近
+    S.filter((s) => s.low).sort((x, y) => x.t1 - y.t1 || x.a - y.a).forEach((s, i) => (s.treat = !useCtrl || (i + (s.coin ? 1 : 0)) % 2 === 0));
+    S.forEach((s) => { if (!s.low) s.treat = false; s.t2 = clip(s.a + s.e2 + (s.treat ? eff : 0)); });
+    const g = (f) => S.filter(f), m = (a, k) => W.mean(a.map((s) => s[k]));
+    const T = g((s) => s.treat), Cn = g((s) => s.low && !s.treat), Top = g((s) => s.t1 >= sorted[Math.floor(S.length * 0.75)].t1);
+    const dT = m(T, "t2") - m(T, "t1"), dC = Cn.length ? m(Cn, "t2") - m(Cn, "t1") : NaN;
+    const stat = (cls, n, l) => W.el("div", { class: "stat " + cls }, W.el("b", {}, n), W.el("span", {}, l));
+    W.$("#stats").replaceChildren(
+      stat("orange", (dT >= 0 ? "+" : "") + dT.toFixed(1), `補救組 ${T.length} 人的「進步」`),
+      useCtrl ? stat("purple", (dC >= 0 ? "+" : "") + dC.toFixed(1), `對照組 ${Cn.length} 人（沒補救）的變化`) : stat("", eff, "真實效果（你設定的）"),
+      useCtrl ? stat("green", (dT - dC).toFixed(1), "補救組 − 對照組＝估計效果") : stat("", (m(Top, "t2") - m(Top, "t1")).toFixed(1), "前 25% 學生的變化"));
+    W.$("#msg").innerHTML = useCtrl
+      ? `<strong>有了對照組：</strong>兩組都會因為均值回歸而「進步」，相減之後的 ${(dT - dC).toFixed(1)} 分才接近真實效果 ${eff} 分（剩下的差距是抽樣誤差，按「重新抽一批學生」看看）。這就是為什麼成效評估需要比較對象。`
+      : eff === 0 ? `<strong>補救什麼都沒做，平均卻「進步」了 ${dT.toFixed(1)} 分。</strong>第一次考很差的人，有一部分只是那天運氣不好；第二次運氣回到平均，分數自然回升。這叫<strong>均值回歸</strong>。把誤差拉到 0 試試看。`
+      : `真實效果 ${eff} 分，但觀察到的「進步」是 ${dT.toFixed(1)} 分——多出來的部分是均值回歸。沒有對照組，就分不出來。`;
+    sc.data.datasets = [
+      { label: "其他學生", data: g((s) => !s.low).map((s) => ({ x: s.t1, y: s.t2 })), backgroundColor: "rgba(138,148,166,.45)", pointRadius: 3 },
+      { label: "參加補救", data: T.map((s) => ({ x: s.t1, y: s.t2 })), backgroundColor: W.color.orange, pointRadius: 4 },
+      ...(useCtrl ? [{ label: "對照組（後段、沒補救）", data: Cn.map((s) => ({ x: s.t1, y: s.t2 })), backgroundColor: W.color.purple, pointRadius: 4 }] : []),
+      { label: "兩次一樣", type: "line", data: [{ x: 20, y: 20 }, { x: 100, y: 100 }], borderColor: "#1F2A44", borderDash: [5, 5], pointRadius: 0, borderWidth: 1 },
+    ];
+    sc.update();
+    const groups = [["參加補救", T], ...(useCtrl ? [["對照組", Cn]] : []), ["前 25%", Top]];
+    bar.data.labels = groups.map((x) => x[0]);
+    bar.data.datasets = [
+      { label: "第一次", data: groups.map((x) => m(x[1], "t1")), backgroundColor: W.color.gray },
+      { label: "第二次", data: groups.map((x) => m(x[1], "t2")), backgroundColor: W.color.orange },
+    ];
+    bar.update();
+  }
+  ["eff", "noise", "cut", "ctrl"].forEach((id) => W.$("#" + id).addEventListener("input", run));
+  W.$("#again").onclick = () => { seed++; run(); };
+  W.$("#copy").onclick = () => {
+    const csv = ["代號,第一次段考,第二次段考,是否參加補救"].concat(S.map((s) => `${s.id},${s.t1},${s.t2},${s.treat ? "是" : "否"}`)).join("\n");
+    W.copy("以下是某高中 600 位學生兩次段考的數學成績（模擬資料）。第一次段考後，後段學生參加了補救教學。請分析補救前後的成績變化，並判斷補救教學是否有效。\n\n" + csv, "已複製，貼給 AI");
+  };
+  W.$("#copy2").onclick = () => W.copy("這個結論有什麼漏洞？還需要哪些資料，才能確認成績進步是補救教學造成的？", "已複製追問");
+  run();
+});
+</script>
+</body>
+</html>

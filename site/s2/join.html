@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>合併與檢核</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script src="../assets/js/common.js"></script>
+<style>
+  .venn { position: relative; height: 210px; max-width: 520px; margin: 0 auto; }
+  .venn .c { position: absolute; top: 10px; width: 250px; height: 190px; border-radius: 50%; display: flex; align-items: center; font-weight: 700; cursor: pointer; transition: opacity .2s; }
+  .venn .l { left: 0; background: rgba(83, 74, 183, .16); border: 2px solid var(--purple); justify-content: flex-start; padding-left: 40px; }
+  .venn .r { right: 0; background: rgba(15, 110, 86, .14); border: 2px solid var(--green); justify-content: flex-end; padding-right: 40px; }
+  .venn .mid { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -40%); text-align: center; font-weight: 700; }
+  .venn .lab { position: absolute; top: -6px; font-size: .82rem; color: var(--muted); }
+  .venn b { font-size: 1.8rem; display: block; }
+  .jk button { min-width: 92px; }
+</style>
+</head>
+<body data-root="../" data-lab="s2/join" data-time="約 15 分鐘"
+      data-lead="合併查詢的重點不是「接起來」，而是「誰沒接起來、為什麼」。選一組資料、一種聯結種類，看看對不到的是誰。">
+<main class="wrap">
+  <div class="card stack">
+    <div class="row"><span class="small muted" style="width:4em">合併</span><div class="seg" id="sc"></div></div>
+    <div class="row"><span class="small muted" style="width:4em">聯結種類</span><div class="seg jk" id="jk"></div></div>
+    <div class="row" id="opt"></div>
+  </div>
+  <div class="grid g2" style="margin-top:16px">
+    <div class="card">
+      <div class="venn" id="venn"></div>
+      <p class="small" id="jdesc" style="margin-top:8px"></p>
+      <pre id="mcode" style="margin-top:8px"></pre>
+    </div>
+    <div class="card">
+      <div class="row"><h3 style="margin:0">結果</h3><span class="spacer"></span><span class="small muted" id="cnt"></span></div>
+      <div class="tablewrap" id="tbl" style="margin-top:8px;max-height:420px"></div>
+    </div>
+  </div>
+  <div class="callout green" style="margin-top:16px">
+    <p><strong>品質檢核的關鍵：左方反向合併。</strong>它只留下「對不到的」——休學生、轉入生、帳號打錯的人，每次重新整理都會自動出現在檢核表上。</p>
+  </div>
+</main>
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  const D = await W.json("s2.json");
+  const F = Object.fromEntries(D.files.map((f) => [f.id, f]));
+  const roster = F.roster.rows.slice(1).map((r) => ({ key: String(r[0]), info: `${r[3]} 班` }));
+  const scoreRows = F.score.rows.filter((r) => typeof r[2] === "number").map((r) => ({ key: String(r[2]), raw: r[2], info: `國文 ${r[3] ?? "空白"}` }));
+  const att = Object.entries(F.att.months).filter(([, m]) => !m.later).flatMap(([n, m]) => m.rows.slice(1).map((r) => ({ key: r[3], info: `${r[0]} ${r[6]}`, file: n })));
+  const idm = F.map.sheets["身分對照"].slice(1);
+  const acc2sid = Object.fromEntries(idm.map((r) => [r[1], String(r[0])]));
+  const lp = F.lp.rows.slice(1).map((r) => ({ acct: r[2], info: `已上傳 ${r[5]}/${r[4]}` }));
+  const SUS = "已休學：名冊只列在學生，休學前的成績、出缺席就對不到";
+  const WHY = { "111057": SUS, "111122": SUS, "111168": SUS, "111204": "11 月轉入：名冊有，段考時還沒來；身分對照也還沒更新" };
+  const SC = {
+    score: { name: "段考成績 ↔ 名冊", L: "段考成績", R: "名冊", left: () => scoreRows, opt: null,
+      m: (jk) => `Table.NestedJoin(段考成績, {"學號"}, 名冊, {"學號"}, "名冊", JoinKind.${jk})` },
+    att: { name: "出缺席 ↔ 名冊", L: "出缺席（9–11 月）", R: "名冊", opt: ["trim", "先修剪學號（Text.Trim）", true],
+      left: (o) => att.map((a) => ({ ...a, key: o.trim ? a.key.trim() : a.key })),
+      m: (jk, o) => (o.trim ? 'Table.TransformColumns(出缺席, {{"學號", Text.Trim, type text}})\n' : "") + `Table.NestedJoin(出缺席, {"學號"}, 名冊, {"學號"}, "名冊", JoinKind.${jk})` },
+    lp: { name: "學習歷程 ↔ 名冊", L: "學習歷程", R: "名冊", opt: ["map", "透過身分對照表（不要自己拆帳號）", true],
+      left: (o) => lp.map((a) => ({ key: o.map ? acc2sid[a.acct] || "（對照表找不到）" : a.acct.replace(/^s/, "").split("@")[0], info: a.acct + "　" + a.info, acct: a.acct })),
+      m: (jk, o) => (o.map ? `接學號 = Table.NestedJoin(學習歷程, {"帳號"}, 身分對照, {"學校帳號"}, "對照", JoinKind.LeftOuter)\n` : '拆學號 = Table.AddColumn(學習歷程, "學號", each Text.BetweenDelimiters([帳號], "s", "@"))\n') + `Table.NestedJoin(…, {"學號"}, 名冊, {"學號"}, "名冊", JoinKind.${jk})` },
+  };
+  const JK = { LeftOuter: ["左方外部", "保留左邊全部，右邊對得到的帶進來"], Inner: ["內部", "只留兩邊都有的"], LeftAnti: ["左方反向", "只留左邊有、右邊對不到的 → 檢核用"], RightAnti: ["右方反向", "只留右邊有、左邊沒有的"] };
+  let sc = "score", jk = "LeftAnti";
+  const opts = { trim: true, map: true };
+  function draw() {
+    W.$("#sc").replaceChildren(...Object.entries(SC).map(([k, v]) => W.el("button", { "aria-pressed": k === sc, onclick: () => { sc = k; draw(); } }, v.name)));
+    W.$("#jk").replaceChildren(...Object.entries(JK).map(([k, v]) => W.el("button", { "aria-pressed": k === jk, onclick: () => { jk = k; draw(); } }, v[0])));
+    const S = SC[sc];
+    W.$("#opt").replaceChildren(S.opt ? W.el("label", { class: "small" }, W.el("input", { type: "checkbox", checked: opts[S.opt[0]], onchange: (e) => { opts[S.opt[0]] = e.target.checked; draw(); } }), " " + S.opt[1]) : "");
+    const L = S.left(opts), Rk = new Set(roster.map((r) => r.key)), Lk = new Set(L.map((r) => r.key));
+    const lOnly = L.filter((r) => !Rk.has(r.key)), both = L.filter((r) => Rk.has(r.key)), rOnly = roster.filter((r) => !Lk.has(r.key));
+    const uniq = (a) => new Set(a.map((r) => r.key)).size;
+    W.$("#venn").innerHTML = `<div class="c l" style="opacity:${jk === "RightAnti" ? .35 : 1}"><span class="lab" style="left:20px">${S.L}</span><span><b>${uniq(lOnly)}</b>只在左邊</span></div>
+      <div class="c r" style="opacity:${jk === "LeftAnti" ? .35 : 1}"><span class="lab" style="right:20px">${S.R}</span><span style="text-align:right"><b>${uniq(rOnly)}</b>只在右邊</span></div>
+      <div class="mid" style="opacity:${/Anti/.test(jk) ? .35 : 1}"><b>${uniq(both)}</b>兩邊都有</div>`;
+    W.$("#jdesc").innerHTML = `<strong>${JK[jk][0]}：</strong>${JK[jk][1]}。（數字為不重複的學號／帳號數）`;
+    W.$("#mcode").textContent = S.m(jk, opts);
+    const why = (r) => WHY[r.key] || (r.key !== r.key.trim() ? "學號尾端有空白" : /[a-z]$/.test(r.key) ? "帳號多一個字母，拆出來不是學號" : r.key === "（對照表找不到）" ? "轉入生帳號尚未寫進身分對照表" : "");
+    let cols, rows;
+    if (jk === "LeftAnti") { cols = ["學號（左）", "內容", "可能原因"]; rows = lOnly.map((r) => [r.key, r.info, why(r)]); }
+    else if (jk === "RightAnti") { cols = ["學號（名冊）", "名冊", "可能原因"]; rows = rOnly.map((r) => [r.key, r.info, WHY[r.key] || ""]); }
+    else if (jk === "Inner") { cols = ["學號", "左邊內容", "名冊"]; const m = Object.fromEntries(roster.map((r) => [r.key, r.info])); rows = both.map((r) => [r.key, r.info, m[r.key]]); }
+    else { cols = ["學號", "左邊內容", "名冊"]; const m = Object.fromEntries(roster.map((r) => [r.key, r.info])); rows = L.map((r) => [r.key, r.info, m[r.key] ?? null]); }
+    W.$("#cnt").textContent = `${rows.length} 列`;
+    W.table(W.$("#tbl"), cols, rows, { rowNum: 1, max: 300, cellClass: (i, j, v) => (v === null ? "m m-missing" : j === 2 && v ? "m m-absent" : "") });
+  }
+  draw();
+});
+</script>
+</body>
+</html>

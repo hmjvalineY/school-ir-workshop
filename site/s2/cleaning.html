@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>清洗步驟播放器</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script src="../assets/js/common.js"></script>
+<style>
+  .slist { list-style: none; margin: 0; padding: 0; }
+  .slist li { display: grid; grid-template-columns: 26px 1fr; gap: 8px; padding: 7px 8px; border-radius: 8px; cursor: pointer; font-size: .9rem; }
+  .slist li .n { width: 22px; height: 22px; border-radius: 50%; background: var(--line); color: var(--muted); display: grid; place-items: center; font-size: .75rem; font-weight: 700; }
+  .slist li.done .n { background: var(--green); color: #fff; }
+  .slist li.cur { background: var(--green-bg); }
+  .slist li.skip { opacity: .45; text-decoration: line-through; }
+  .ck { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line-2); font-size: .88rem; }
+  .ok { color: var(--green); font-weight: 700; } .bad { color: var(--orange); font-weight: 700; }
+</style>
+</head>
+<body data-root="../" data-lab="s2/cleaning" data-time="約 20 分鐘"
+      data-lead="系統B 的段考成績是給人看的報表，不是給電腦讀的表格。照 Power Query 的步驟一步一步套用，看每一步改變了什麼。">
+<main class="wrap">
+  <div class="grid g3">
+    <div class="card">
+      <div class="row" style="margin-bottom:8px">
+        <button class="btn sm ghost" id="prev">◀ 上一步</button>
+        <button class="btn sm green" id="next">下一步 ▶</button>
+        <button class="btn sm ghost" id="all">全部套用</button>
+      </div>
+      <label class="small"><input type="checkbox" id="wrong"> 錯誤示範：跳過「取代 null」直接逆透視</label>
+      <ol class="slist" id="slist" style="margin-top:10px"></ol>
+    </div>
+    <div class="card" style="grid-column: span 2">
+      <div class="row"><span class="chip green" id="sno"></span><h3 style="margin:0" id="stitle"></h3></div>
+      <p class="small" id="sdesc" style="margin-top:8px"></p>
+      <pre id="scode"></pre>
+      <div class="grid g4" id="sstats"></div>
+    </div>
+  </div>
+  <div class="grid g3" style="margin-top:16px">
+    <div class="card" style="grid-column: span 2">
+      <div class="row" style="margin-bottom:8px"><h3 style="margin:0">目前的表格</h3><span class="spacer"></span><span class="small muted" id="dims"></span></div>
+      <div class="tablewrap" id="tbl" style="max-height:520px"></div>
+    </div>
+    <div class="card">
+      <h3>檢查點（標準答案）</h3>
+      <div id="checks"></div>
+      <p class="small faint" style="margin-top:10px">完整的 M 公式：<a href="../downloads/第二場_解答.zip" download>第二場_解答.zip</a> ▸ M公式 ▸ 02_段考成績.m</p>
+    </div>
+  </div>
+</main>
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  const D = await W.json("s2.json");
+  const A = D.answers;
+  const raw = D.files.find((f) => f.id === "score").rows;
+  const SUBJ = ["國文", "英文", "數學", "自然", "社會"];
+  const half = (v) => String(v).replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 65248));
+  const STEPS = [
+    { t: "來源：匯入「成績一覽表」工作表", d: "Power Query 讀進來的樣子：欄名是 Column1、Column2…，前幾列是報表標題。", m: '來源 = Excel.Workbook(File.Contents(…"系統B_段考成績.xlsx"), null, true),\n工作表 = 來源{[Item = "成績一覽表", Kind = "Sheet"]}[Data]',
+      f: () => ({ cols: Array.from({ length: 11 }, (_, i) => "Column" + (i + 1)), rows: raw.map((r) => Array.from({ length: 11 }, (_, i) => r[i] ?? null)) }) },
+    { t: "移除頂端 3 列", d: "前 3 列是標題、列印日期和空白，不是資料。", m: "移除頂端 = Table.Skip(工作表, 3)", f: (x) => ({ ...x, rows: x.rows.slice(3) }) },
+    { t: "使用第一個資料列作為標頭", d: "把「班級、座號、學號…」那一列升成欄名。", m: "升階標頭 = Table.PromoteHeaders(移除頂端, [PromoteAllScalars = true])",
+      f: (x) => ({ cols: x.rows[0].map(String), rows: x.rows.slice(1) }) },
+    { t: "篩選學號：去掉空白、重複標題列、班平均", d: "一個條件同時清掉三種雜訊：空白列和班平均的學號是空的，重複標題列的學號是「學號」兩個字。", m: '篩選學號 = Table.SelectRows(升階標頭, each [學號] <> null and [學號] <> "學號")',
+      f: (x) => ({ ...x, rows: x.rows.filter((r) => r[2] !== null && r[2] !== "學號") }) },
+    { t: "移除不需要的欄", d: "班級以名冊為準、座號用不到；總分、平均、名次是報表算的，之後自己算。", m: 'Table.RemoveColumns(篩選學號, {"班級", "座號", "總分", "平均", "名次"})',
+      f: (x) => { const keep = x.cols.map((c, i) => (["班級", "座號", "總分", "平均", "名次"].includes(c) ? -1 : i)).filter((i) => i >= 0);
+        return { cols: keep.map((i) => x.cols[i]), rows: x.rows.map((r) => keep.map((i) => r[i])) }; } },
+    { t: "學號改成文字", d: "學號被存成數字，開頭是 0 的學號會被吃掉，也對不上名冊的文字學號。", m: 'Table.TransformColumnTypes(移除欄, {{"學號", type text}})',
+      f: (x) => ({ ...x, rows: x.rows.map((r) => [String(r[0]), ...r.slice(1)]) }), changed: [0] },
+    { t: "空白成績填入「未登錄」", d: "逆透視會直接丟掉空白格——4 筆未登錄的成績會無聲無息地消失。先填起來。", m: 'Table.ReplaceValue(學號文字, null, "未登錄", Replacer.ReplaceValue, {"國文","英文","數學","自然","社會"})',
+      f: (x) => ({ ...x, rows: x.rows.map((r) => r.map((v, i) => (i > 0 && v === null ? "未登錄" : v))) }), skippable: true },
+    { t: "逆透視：五科變成一欄", d: "寬表（一人一列五科）變長表（一人一科一列），之後才能依科目分組、篩選。", m: '逆透視 = Table.UnpivotOtherColumns(填未登錄, {"學號"}, "科目", "原始值")',
+      f: (x) => { const rows = []; x.rows.forEach((r) => x.cols.slice(1).forEach((c, j) => { if (r[j + 1] !== null) rows.push([r[0], c, r[j + 1]]); })); return { cols: ["學號", "科目", "原始值"], rows }; } },
+    { t: "全形數字轉半形", d: "「８５」看起來是數字，電腦卻當成文字。", m: "半形值 = Table.AddColumn(逆透視, \"半形值\", each Text.Combine(List.Transform(\n  Text.ToList(Text.From([原始值])), each let c = Character.ToNumber(_) in\n  if c >= 65296 and c <= 65305 then Character.FromNumber(c - 65248) else _)))",
+      f: (x) => ({ cols: [...x.cols, "半形值"], rows: x.rows.map((r) => [...r, half(r[2])]) }), changed: [3] },
+    { t: "標記狀態：缺考、未登錄、正常", d: "「缺」是缺考，不是 0 分；未登錄也不是 0 分。兩者都不該算進平均。", m: 'Table.AddColumn(半形值, "狀態", each if [原始值] = "缺" then "缺考"\n  else if [原始值] = "未登錄" then "未登錄" else "正常")',
+      f: (x) => ({ cols: [...x.cols, "狀態"], rows: x.rows.map((r) => [...r, r[2] === "缺" ? "缺考" : r[2] === "未登錄" ? "未登錄" : "正常"]) }), changed: [4] },
+    { t: "成績轉數字，移除暫存欄", d: "只有「正常」的才轉成數字；缺考、未登錄留空，平均時自然排除。", m: 'Table.AddColumn(狀態, "成績", each if [狀態] = "正常" then Number.From([半形值]) else null, Int64.Type)',
+      f: (x) => ({ cols: ["學號", "科目", "狀態", "成績"], rows: x.rows.map((r) => [r[0], r[1], r[4], r[4] === "正常" ? Number(r[3]) : null]) }), changed: [3] },
+  ];
+  let cur = 0;
+  const wrong = () => W.$("#wrong").checked;
+  function compute(n) { let x = null; for (let i = 0; i <= n; i++) { if (STEPS[i].skippable && wrong()) continue; x = STEPS[i].f(x); } return x; }
+  function checks(n, x) {
+    const out = [];
+    const add = (label, got, want, at) => out.push(W.el("div", { class: "ck" }, W.el("span", {}, label),
+      n >= at ? W.el("span", { class: got === want ? "ok" : "bad" }, `${got}${got === want ? " ✓" : `（應為 ${want}）`}`) : W.el("span", { class: "faint" }, `第 ${at} 步後檢查`)));
+    const x3 = compute(3), x7 = compute(Math.max(7, n)), xf = compute(10);
+    add("學生列數（篩選後）", x3.rows.length, A.score_wide_rows, 3);
+    add("逆透視後列數", compute(7).rows.length, A.score_long_rows, 7);
+    add("缺考筆數", xf.rows.filter((r) => r[2] === "缺考").length, A.score_absent, 9);
+    add("未登錄筆數", xf.rows.filter((r) => r[2] === "未登錄").length, A.score_blank, 9);
+    add("全形數字筆數", compute(7).rows.filter((r) => /[０-９]/.test(String(r[2]))).length, A.score_fullwidth, 8);
+    const means = SUBJ.map((s) => { const v = xf.rows.filter((r) => r[1] === s && r[3] != null).map((r) => r[3]); return Math.round(W.mean(v) * 10) / 10; });
+    SUBJ.forEach((s, i) => add(`${s}平均`, means[i], A.score_subject_mean[s], 10));
+    return out;
+  }
+  function draw() {
+    const s = STEPS[cur];
+    W.$("#slist").replaceChildren(...STEPS.map((st, i) => W.el("li", { class: (i < cur ? "done" : "") + (i === cur ? " cur done" : "") + (st.skippable && wrong() ? " skip" : ""),
+      onclick: () => { cur = i; draw(); } }, W.el("span", { class: "n" }, i), W.el("span", {}, st.t))));
+    W.$("#sno").textContent = cur === 0 ? "來源" : "步驟 " + cur;
+    W.$("#stitle").textContent = s.t; W.$("#sdesc").textContent = s.d; W.$("#scode").textContent = s.m;
+    const x = compute(cur);
+    const prev = cur ? compute(cur - 1) : null;
+    const stat = (cls, n, l) => W.el("div", { class: "stat " + cls }, W.el("b", {}, n), W.el("span", {}, l));
+    W.$("#sstats").replaceChildren(stat("", x.rows.length, "列數"), stat("", x.cols.length, "欄數"),
+      prev ? stat(x.rows.length < prev.rows.length ? "orange" : "green", (x.rows.length - prev.rows.length >= 0 ? "+" : "") + (x.rows.length - prev.rows.length), "列數變化") : stat("", "—", "列數變化"),
+      cur === 7 && wrong() ? stat("orange", A.score_long_rows - x.rows.length, "筆成績消失了！") : stat("", "", ""));
+    W.$("#dims").textContent = `${x.rows.length} 列 × ${x.cols.length} 欄`;
+    const ch = new Set(s.changed || []);
+    W.table(W.$("#tbl"), x.cols, x.rows, { rowNum: 1, max: 300, cellClass: (i, j) => (ch.has(j) ? "changed" : ""),
+      marks: x.rows.map((r, i) => r.some((v) => v === "缺" || v === "未登錄" || /[０-９]/.test(String(v))) ? { r: i, c: r.findIndex((v) => v === "缺" || v === "未登錄" || /[０-９]/.test(String(v))), k: "absent", n: "特殊值" } : null).filter(Boolean) });
+    W.$("#checks").replaceChildren(...checks(cur, x));
+    W.$("#prev").disabled = cur === 0; W.$("#next").disabled = cur === STEPS.length - 1;
+  }
+  W.$("#prev").onclick = () => { if (cur) { cur--; draw(); } };
+  W.$("#next").onclick = () => { if (cur < STEPS.length - 1) { cur++; draw(); } };
+  W.$("#all").onclick = () => { cur = STEPS.length - 1; draw(); };
+  W.$("#wrong").onchange = draw;
+  draw();
+});
+</script>
+</body>
+</html>

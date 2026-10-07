@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>下載練習資料｜校務研究研習互動實作</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/site.css">
+<script src="assets/js/common.js"></script>
+</head>
+<body data-root="" data-crumb="下載資料">
+<section class="labhead"><div class="wrap">
+  <h1>下載練習資料</h1>
+  <p class="lead">壓縮檔請先「解壓縮到資料夾」再開啟——第二場的「從資料夾匯入」練習，在壓縮檔裡直接開會失敗。所有資料皆為模擬資料。</p>
+</div></section>
+<main class="wrap" id="dl"><p class="muted">載入中…</p></main>
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  const main = W.$("#dl");
+  let m;
+  try { m = await W.json("downloads.json"); } catch (e) { main.innerHTML = "<p>" + W.esc(e.message) + "</p>"; return; }
+  main.innerHTML = "";
+  const item = (f, primary) => W.el("li", { style: "margin:8px 0" },
+    W.el("a", { href: encodeURI(f.href), download: "", class: primary ? "btn sm orange" : "" }, f.name),
+    W.el("span", { class: "small faint" }, "　" + W.bytes(f.size)),
+    f.desc ? W.el("div", { class: "small muted" }, f.desc) : null);
+  W.SESSIONS.forEach((s) => {
+    const bundles = m.bundles[s.id] || [], files = m.files[s.id] || [];
+    if (!bundles.length && !files.length) return;
+    const sec = W.el("section", { class: "session", id: s.id },
+      W.el("header", {}, W.el("span", { class: "chip slide" }, s.no), W.el("h2", {}, s.name)),
+      W.el("div", { class: "grid g2" },
+        W.el("div", { class: "card" }, W.el("h3", {}, "打包下載"), W.el("ul", { style: "list-style:none;padding:0;margin:0" }, bundles.map((f) => item(f, true)))),
+        W.el("div", { class: "card" }, W.el("h3", {}, "個別檔案"), W.el("ul", { style: "list-style:none;padding:0;margin:0" }, files.map((f) => item(f))))));
+    if (s.id === "s2" && m.practice) {
+      sec.append(W.el("div", { class: "card", style: "margin-top:16px" },
+        W.el("h3", {}, "練習資料（單檔）"),
+        W.el("p", { class: "small muted" }, "只想看其中一個檔時用；正式練習請下載上方的「第二場_練習資料.zip」，資料夾結構才會正確。"),
+        W.el("ul", { class: "small" }, m.practice.map((f) => W.el("li", {}, W.el("a", { href: encodeURI(f.href), download: "" }, f.name), " ", W.el("span", { class: "faint" }, W.bytes(f.size)))))));
+    }
+    main.append(sec);
+  });
+  if (location.hash) { const t = document.getElementById(location.hash.slice(1)); if (t) t.scrollIntoView(); }
+});
+</script>
+</body>
+</html>

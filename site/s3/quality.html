@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>小操作二</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script src="../assets/js/common.js"></script>
+<style>
+  #tbl td:not(.rn) { cursor: pointer; }
+  #tbl td.flag { outline: 2px solid var(--orange); outline-offset: -2px; background: var(--orange-bg); }
+  #tbl td.hit { outline: 2px solid var(--green); outline-offset: -2px; background: var(--green-bg) !important; }
+  #tbl td.miss { outline: 2px dashed var(--purple); outline-offset: -2px; background: var(--purple-bg) !important; }
+  #tbl td.false { opacity: .5; text-decoration: line-through; }
+  .timer { font-size: 2.2rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--navy); }
+  .dim { display: grid; grid-template-columns: 90px 1fr auto; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line-2); }
+  .bar { height: 10px; background: var(--line-2); border-radius: 6px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--green); }
+</style>
+</head>
+<body data-root="../" data-lab="s3/quality" data-time="5 分鐘找錯＋5 分鐘對答案"
+      data-lead="各組先用 5 分鐘人工找問題：點一下格子做標記。時間到再對答案，並對照 AI 通常會抓到哪些、會漏掉哪些。">
+<main class="wrap">
+  <div class="grid g3">
+    <div class="card stack">
+      <div class="row"><span class="timer" id="timer">5:00</span><span class="spacer"></span>
+        <button class="btn sm orange" id="start">開始計時</button></div>
+      <p class="small muted">點格子標記你認為有問題的地方，再點一次取消。重複列請點那一列的任一格。</p>
+      <p class="small"><strong id="nflag">0</strong> 個標記</p>
+    </div>
+    <div class="card stack">
+      <h3>六個面向</h3>
+      <p class="small"><span class="chip">完整性</span> 必填欄位是否缺值　<span class="chip">正確性</span> 值是否合理　<span class="chip">一致性</span> 寫法是否統一　<span class="chip">即時性</span> 多久更新　<span class="chip">唯一性</span> 是否重複　<span class="chip">有效性</span> 是否符合業務邏輯</p>
+    </div>
+    <div class="card stack">
+      <h3>對答案</h3>
+      <div class="row">
+        <button class="btn sm green" id="check">對答案</button>
+        <button class="btn sm ghost" id="reset">清除重來</button>
+        <button class="btn sm ghost" id="copyAI">複製「請 AI 檢核」提示詞</button>
+      </div>
+      <p class="small faint">資料：<a href="../downloads/s3/治理研習_髒資料_學生學習.xlsx" download>髒資料.xlsx</a>　解答：<a href="../downloads/s3/治理研習_解答_問題清單.xlsx" download>問題清單.xlsx</a></p>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px" id="result" hidden>
+    <div class="grid g4" id="scores"></div>
+    <div class="grid g2" style="margin-top:16px">
+      <div><h3>依面向</h3><div id="dims"></div></div>
+      <div><h3>漏掉的問題</h3><ul class="small" id="missed"></ul>
+        <div class="callout orange small" style="margin-top:10px">AI 通常找得多，但會漏掉<strong>業務邏輯錯誤</strong>：它不知道「休學生不該有出缺勤」、也不知道 999 是缺考代碼。這些只有懂學校的人看得出來。</div></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="row" style="margin-bottom:8px"><h3 style="margin:0">學生學習資料（58 列）</h3><span class="spacer"></span>
+      <div class="legend" id="legend" hidden><span><i style="background:#E6F1EE;border:2px solid #0F6E56"></i>找到</span>
+        <span><i style="background:#EEEDF8;border:2px dashed #534AB7"></i>漏掉</span><span><i style="background:#FBEDE7"></i>標記但不是問題</span></div></div>
+    <div class="tablewrap" id="tbl" style="max-height:640px"></div>
+  </div>
+</main>
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  const d = await W.json("s3.json");
+  const C = d.columns;
+  const AI = { "正確性": "常抓到", "完整性": "常抓到", "一致性": "常抓到", "唯一性": "常抓到", "即時性": "要提示才會", "有效性": "常漏掉" };
+  const DIMS = ["完整性", "正確性", "一致性", "即時性", "唯一性", "有效性"];
+  // 每個問題對應到哪些格子（r,c）
+  const firstIdx = {};
+  d.dirty.forEach((r, i) => { if (!(r.學號 in firstIdx)) firstIdx[r.學號] = i; });
+  const issues = d.issues.map((it) => {
+    const rowsOf = d.dirty.map((r, i) => (r.學號 === it.學號 ? i : -1)).filter((i) => i >= 0);
+    const rowLevel = it.欄位 === "（整列）" || it.面向 === "有效性";
+    const rr = it.面向 === "唯一性" ? rowsOf.slice(1) : rowLevel ? rowsOf : rowsOf.slice(0, 1);
+    return { ...it, rows: rr, col: rowLevel ? -1 : C.indexOf(it.欄位) };
+  });
+  W.table(W.$("#tbl"), C, d.dirty.map((r) => C.map((c) => r[c])), { rowNum: 2 });
+  const flags = new Set();
+  let checked = false;
+  W.$("#tbl").addEventListener("click", (e) => {
+    const td = e.target.closest("td"); if (!td || td.classList.contains("rn") || checked) return;
+    const tr = td.parentElement, r = [...tr.parentElement.children].indexOf(tr), c = [...tr.children].indexOf(td) - 1;
+    const k = r + ":" + c;
+    flags.has(k) ? flags.delete(k) : flags.add(k);
+    td.classList.toggle("flag");
+    W.$("#nflag").textContent = flags.size;
+  });
+  // 計時
+  let t = 300, h = null;
+  const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  W.$("#start").onclick = () => {
+    if (h) { clearInterval(h); h = null; W.$("#start").textContent = "繼續"; return; }
+    W.$("#start").textContent = "暫停";
+    h = setInterval(() => { t--; W.$("#timer").textContent = fmt(Math.max(0, t));
+      if (t <= 0) { clearInterval(h); h = null; W.$("#timer").style.color = "var(--orange)"; W.toast("時間到！按「對答案」"); } }, 1000);
+  };
+  const cell = (r, c) => W.$("#tbl tbody").children[r].children[c + 1];
+  W.$("#check").onclick = () => {
+    checked = true;
+    const used = new Set();
+    let found = 0;
+    const byDim = {};
+    issues.forEach((it) => {
+      const hit = it.rows.some((r) => [...flags].some((k) => {
+        const [fr, fc] = k.split(":").map(Number);
+        const ok = fr === r && (it.col === -1 || fc === it.col);
+        if (ok) used.add(k);
+        return ok;
+      }));
+      it.hit = hit; if (hit) found++;
+      (byDim[it.面向] = byDim[it.面向] || { n: 0, f: 0 }).n++; if (hit) byDim[it.面向].f++;
+      it.rows.forEach((r) => { const td = cell(r, it.col === -1 ? 1 : it.col); td.classList.remove("flag"); td.classList.add(hit ? "hit" : "miss");
+        td.dataset.tip = `${it.面向}｜${it.問題}（AI ${AI[it.面向]}）`; });
+    });
+    const falses = [...flags].filter((k) => !used.has(k));
+    falses.forEach((k) => { const [r, c] = k.split(":").map(Number); cell(r, c).classList.add("false"); });
+    const stat = (cls, n, l) => W.el("div", { class: "stat " + cls }, W.el("b", {}, n), W.el("span", {}, l));
+    W.$("#scores").replaceChildren(stat("green", `${found} / ${issues.length}`, "找到的問題"), stat("purple", issues.length - found, "漏掉的問題"),
+      stat("orange", falses.length, "標記但不是問題"), stat("", W.pct(found / issues.length, 0), "命中率"));
+    W.$("#dims").replaceChildren(...DIMS.map((k) => { const v = byDim[k] || { n: 0, f: 0 };
+      return W.el("div", { class: "dim" }, W.el("strong", {}, k), W.el("div", { class: "bar" }, W.el("i", { style: `width:${v.n ? (v.f / v.n) * 100 : 0}%` })),
+        W.el("span", { class: "small" }, `${v.f}/${v.n}　`, W.el("span", { class: "chip " + (AI[k] === "常漏掉" ? "orange" : AI[k] === "常抓到" ? "green" : "gold") }, "AI " + AI[k]))); }));
+    W.$("#missed").replaceChildren(...issues.filter((x) => !x.hit).map((x) => W.el("li", {}, W.el("strong", {}, `第 ${x.Excel列} 列 ${x.學號}`), `　${x.面向}｜${x.問題}`)));
+    if (!W.$("#missed").children.length) W.$("#missed").append(W.el("li", {}, "全部找到了！"));
+    W.$("#result").hidden = false; W.$("#legend").hidden = false;
+    W.$("#result").scrollIntoView({ behavior: "smooth" });
+  };
+  W.$("#reset").onclick = () => location.reload();
+  W.$("#copyAI").onclick = () => {
+    const csv = [C.join(",")].concat(d.dirty.map((r) => C.map((c) => r[c] ?? "").join(","))).join("\n");
+    W.copy("請依「完整性、正確性、一致性、即時性、唯一性、有效性」六個面向，檢核以下高中學生學習資料（CSV，第 1 列為標題，資料從 Excel 第 2 列開始），列出每個問題的列號、欄位、問題與面向。\n\n" + csv, "已複製，貼到 AI 對話後再回來比較");
+  };
+});
+</script>
+</body>
+</html>

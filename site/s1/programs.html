@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>計畫 × 指標</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script src="../assets/js/common.js"></script>
+</head>
+<body data-root="../" data-lab="s1/programs" data-time="講師示範"
+      data-lead="六個計畫、430 萬經費——哪一個真的改變了學校？把計畫接上指標、把參與名單用學生代號比對，一張表、兩張圖就看得出來。">
+<main class="wrap">
+  <div class="seg" id="tabs" style="margin-bottom:14px">
+    <button data-t="ind" aria-pressed="true">① 投入與指標進展</button>
+    <button data-t="flow" aria-pressed="false">② 錢花到誰身上</button>
+  </div>
+  <section id="ind">
+    <div class="grid g3">
+      <div class="card" style="grid-column: span 2"><h3>各指標：經費投入 vs. 離目標還差多少</h3><div style="height:360px"><canvas id="c1"></canvas></div>
+        <p class="small faint">進展＝（112 學年值 − 110 基線）÷（目標 − 110 基線）。100% 表示已達標；負數表示退步。</p></div>
+      <div class="card stack"><div class="callout small" id="m1"></div></div>
+    </div>
+    <div class="card" style="margin-top:16px"><h3>計畫 ↔ 指標對照</h3><div class="tablewrap" id="t1"></div></div>
+  </section>
+  <section id="flow" hidden>
+    <div class="grid g3">
+      <div class="card" style="grid-column: span 2"><h3>學生參與時數的分布（由多到少）</h3><div style="height:360px"><canvas id="c2"></canvas></div></div>
+      <div class="card stack">
+        <div class="stat orange"><b id="topShare"></b><span id="topLabel"></span></div>
+        <div class="stat purple"><b id="none"></b><span>兩年來沒參與過任何計畫的學生</span></div>
+        <div><label class="field">前 <span id="kV"></span> 名學生</label><input type="range" id="k" min="5" max="100" value="24"></div>
+        <div class="callout small">這不是誰的錯——每個計畫各自找「最好找的學生」，加起來就變成同一群人。</div>
+      </div>
+    </div>
+  </section>
+  <div class="callout navy" style="margin-top:16px"><p><strong>以指標為主體，不以計畫為主體。</strong>計畫每年在變，指標不會；學校該累積的是指標的歷年數列。</p></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  W.chartDefaults();
+  const D = await W.json("s1.json");
+  const P = D.plans.rows, I = D.indicators.rows;   // 計畫：代號,名稱,來源,年度,經費,處室,指標；指標：代號,名稱,來源,110,111,112,目標
+  // ---------- ① ----------
+  const ind = I.map((r) => { const fund = W.sum(P.filter((p) => p[6] === r[0]).map((p) => p[4]));
+    return { id: r[0], name: r[1], base: r[3], now: r[5], goal: r[6], fund, prog: (r[5] - r[3]) / (r[6] - r[3]), plans: P.filter((p) => p[6] === r[0]).map((p) => p[1]) }; });
+  new Chart(W.$("#c1"), { type: "bar", data: { labels: ind.map((x) => x.name.replace(/\(%\)/, "")), datasets: [
+      { label: "經費（萬元）", data: ind.map((x) => x.fund / 10000), backgroundColor: W.color.purpleL, yAxisID: "y" },
+      { label: "達標進展（%）", data: ind.map((x) => x.prog * 100), backgroundColor: ind.map((x) => (x.prog < 0.3 ? W.color.orange : W.color.green)), yAxisID: "y1" }] },
+    options: { indexAxis: "x", scales: { y: { position: "left", title: { display: true, text: "萬元" } }, y1: { position: "right", min: -50, max: 120, grid: { drawOnChartArea: false }, title: { display: true, text: "進展 %" } },
+      x: { ticks: { autoSkip: false, maxRotation: 30 } } }, plugins: { legend: { position: "top" } } } });
+  const top = [...ind].sort((a, b) => b.fund - a.fund).slice(0, 2), best = [...ind].filter((x) => x.fund).sort((a, b) => a.fund - b.fund)[0];
+  W.$("#m1").innerHTML = `<strong>投入最多的兩個指標：</strong>${top.map((x) => `「${x.name}」${x.fund / 10000} 萬，進展 ${(x.prog * 100).toFixed(0)}%`).join("；")}。<br><br>` +
+    `<strong>花最少的：</strong>「${best.name}」${best.fund / 10000} 萬，進展 ${(best.prog * 100).toFixed(0)}%。<br><br>沒有對應任何計畫的指標，經費欄是 0。`;
+  W.table(W.$("#t1"), ["指標", "110 基線", "112 學年", "目標", "進展", "經費（元）", "對應計畫"],
+    ind.map((x) => [x.name, x.base, x.now, x.goal, W.pct(x.prog, 0), x.fund, x.plans.join("、") || "（無）"]),
+    { cellClass: (i, j) => (j === 4 && ind[i].prog < 0.3 ? "m m-absent" : "") });
+  // ---------- ② ----------
+  const hrs = {}; D.participation.rows.forEach((r) => (hrs[r[1]] = (hrs[r[1]] || 0) + r[3]));
+  const all = D.roster.rows.map((r) => hrs[r[0]] || 0).sort((a, b) => b - a);
+  const total = W.sum(all);
+  const c2 = new Chart(W.$("#c2"), { type: "bar", data: { labels: all.map((_, i) => i + 1), datasets: [{ data: all, backgroundColor: [], barPercentage: 1, categoryPercentage: 1 }] },
+    options: { plugins: { legend: { display: false }, tooltip: { callbacks: { title: (c) => `第 ${c[0].label} 名`, label: (c) => `${c.raw} 小時` } } },
+      scales: { x: { ticks: { maxTicksLimit: 12 }, title: { display: true, text: "學生（依參與時數排序，共 300 人）" } }, y: { title: { display: true, text: "參與時數" } } } } });
+  function upd() {
+    const k = +W.$("#k").value; W.$("#kV").textContent = k;
+    W.$("#topShare").textContent = W.pct(W.sum(all.slice(0, k)) / total, 0);
+    W.$("#topLabel").textContent = `前 ${k} 名學生用掉的參與時數`;
+    W.$("#none").textContent = all.filter((x) => x === 0).length + " 人";
+    c2.data.datasets[0].backgroundColor = all.map((v, i) => (i < k ? W.color.orange : v === 0 ? "#E6E8EC" : W.color.purpleL)); c2.update();
+  }
+  W.$("#k").oninput = upd; upd();
+  W.$$("#tabs button").forEach((b) => (b.onclick = () => { W.$$("#tabs button").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+    W.$("#ind").hidden = b.dataset.t !== "ind"; W.$("#flow").hidden = b.dataset.t !== "flow"; c2.resize(); }));
+});
+</script>
+</body>
+</html>

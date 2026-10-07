@@ -1,0 +1,115 @@
+{
+  "att_raw_rows": 452,
+  "att_raw_by_file": {
+    "系統C_出缺席_11309.csv": 142,
+    "系統C_出缺席_11310.csv": 169,
+    "系統C_出缺席_11311.csv": 141
+  },
+  "att_dedupe_before_trim": 446,
+  "att_clean_rows": 443,
+  "att_trailing_space_rows": 33,
+  "att_by_leave": {
+    "病假": 157,
+    "事假": 114,
+    "公假": 68,
+    "遲到": 59,
+    "曠課": 45
+  },
+  "att_dec_raw_rows": 163,
+  "att_after_dec_raw": 615,
+  "att_after_dec_clean": 603,
+  "score_wide_rows": 203,
+  "score_long_rows": 1015,
+  "score_long_rows_if_unpivot_with_null": 1011,
+  "score_absent": 9,
+  "score_blank": 4,
+  "score_fullwidth": 6,
+  "score_sheet_rows": 215,
+  "score_sheet_total_rows": 221,
+  "score_subject_mean": {
+    "國文": 70.3,
+    "英文": 67.4,
+    "數學": 62.6,
+    "自然": 66.0,
+    "社會": 70.4
+  },
+  "roster_rows": 201,
+  "score_orphans": [
+    "111057",
+    "111122",
+    "111168"
+  ],
+  "score_orphan_rows": 15,
+  "att_orphans": [
+    "111057"
+  ],
+  "att_orphan_rows": 2,
+  "lp_rows": 201,
+  "lp_unmatched_accounts": [
+    "s111204@stu.example.edu.tw"
+  ],
+  "lp_naive_extract_wrong": [
+    "s111045a@stu.example.edu.tw",
+    "s111130b@stu.example.edu.tw"
+  ],
+  "lp_rate_overall": 82.5,
+  "lp_rate_by_class": {
+    "301": 92.2,
+    "302": 91.9,
+    "303": 85.2,
+    "304": 68.1,
+    "305": 75.2
+  },
+  "lp_rate_by_class_fixed": {
+    "301": 92.2,
+    "302": 91.9,
+    "303": 85.2,
+    "304": 68.1,
+    "305": 74.4
+  },
+  "lp_rate_mean_of_rates": 82.1,
+  "integ_rows": 201,
+  "integ_no_score": [
+    "111204"
+  ],
+  "form_raw_rows": 159,
+  "form_after_dedupe": 149,
+  "form_unresolved": [
+    [
+      "11107",
+      "葉〇瑜",
+      "3年3班",
+      "科學營說明會"
+    ],
+    [
+      "11180",
+      "江〇睿",
+      "3年2班",
+      "學習歷程工作坊"
+    ],
+    [
+      "11131",
+      "蕭o辰",
+      "3年1班",
+      "大學參訪"
+    ],
+    [
+      "11182",
+      "吳〇宇",
+      "3年2班",
+      "科學營說明會"
+    ]
+  ],
+  "form_valid": 145,
+  "form_messy_counts": {
+    "全形": 20,
+    "橫線": 13,
+    "S開頭": 5,
+    "前後空白": 1
+  },
+  "form_by_activity": {
+    "學習歷程工作坊": 55,
+    "科學營說明會": 45,
+    "大學參訪": 45
+  }
+}

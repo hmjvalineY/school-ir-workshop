@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>小操作三</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script src="../assets/js/common.js"></script>
+<style>
+  .sc { display: flex; flex-direction: column; gap: 8px; }
+  .sc .q { font-weight: 600; color: var(--ink); }
+  .vote { display: flex; gap: 6px; }
+  .vote button { flex: 1; font: inherit; font-size: .85rem; font-weight: 700; border-radius: 8px; padding: 6px; cursor: pointer; border: 2px solid transparent; }
+  .v-g { background: #E3F2EA; color: #146C43; } .v-y { background: #FBF0CF; color: #8A6A00; } .v-r { background: #FBE0DB; color: #A8322A; }
+  .vote button[aria-pressed="true"] { border-color: currentColor; }
+  .ans { font-size: .85rem; border-radius: 8px; padding: 8px 10px; display: none; }
+  .ans.show { display: block; }
+  .ans.ok { background: var(--green-bg); } .ans.no { background: var(--orange-bg); }
+  .opt { display: grid; grid-template-columns: 90px 1fr; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line-2); }
+  .k { font-size: 2rem; font-weight: 700; }
+</style>
+</head>
+<body data-root="../" data-lab="s3/privacy" data-time="約 15 分鐘"
+      data-lead="先用 10 張情境卡判斷紅黃綠燈，再把三種去識別化手法套到資料上，看看還剩多少「被認出來」的風險。">
+<main class="wrap">
+  <h2 style="margin-top:0">A　情境卡：哪些資料可以交給 AI？</h2>
+  <div class="row small" style="margin-bottom:10px">
+    <span class="chip" style="background:#E3F2EA;color:#146C43">綠燈｜可以</span> 去識別化後的全校統計
+    <span class="chip" style="background:#FBF0CF;color:#8A6A00">黃燈｜審慎</span> 小樣本彙總、可能被反推
+    <span class="chip" style="background:#FBE0DB;color:#A8322A">紅燈｜禁止</span> 含姓名的輔導或健康紀錄
+    <span class="spacer"></span><button class="btn sm ghost" id="revealAll">全部公布</button>
+    <span class="small" id="score"></span>
+  </div>
+  <div class="grid g2" id="cards"></div>
+
+  <h2>B　去識別化工作台</h2>
+  <p class="muted small">資料為虛構的 10 位學生。每一欄選一種處理方式，右邊即時看結果與「最小群組」：同樣條件的人少於 3 位，就可能被反推是誰。</p>
+  <div class="grid g3">
+    <div class="card" id="opts"></div>
+    <div class="card" style="grid-column: span 2">
+      <div class="row">
+        <div class="stat" id="kbox"><b class="k" id="kval">1</b><span>最小群組人數（k）</span></div>
+        <div class="small" id="kmsg" style="flex:1;min-width:200px"></div>
+        <button class="btn sm" id="dlOut">下載去識別化資料</button>
+        <button class="btn sm ghost" id="dlMap">下載對照表（留校內）</button>
+      </div>
+      <div class="tablewrap" id="out" style="margin-top:10px"></div>
+      <details style="margin-top:10px"><summary class="small">看原始資料</summary><div class="tablewrap" id="raw" style="margin-top:6px"></div></details>
+    </div>
+  </div>
+  <div class="callout navy" style="margin-top:16px"><p><strong>提醒：全場只用模擬資料，這本身就是治理的示範。</strong></p>
+    <p class="small">假名化後的資料仍然是個資（只要對照表還在）。對照表與去識別化資料要分開存放、分開授權。</p></div>
+</main>
+<script>
+const CARDS = [
+  ["全校各年級的數學平均（已去識別化），請 AI 畫成趨勢圖。", "g", "全校統計、看不到個人。"],
+  ["某班只有 4 位女生，把「依性別」的國文平均交給 AI 分析。", "y", "小樣本：4 個人的平均，同學很容易猜出是誰。人數太少就合併類別或不呈現。"],
+  ["把含姓名的輔導紀錄貼給 AI，請它寫摘要。", "r", "輔導紀錄是高度敏感的個資，含姓名更不可能交給外部工具。"],
+  ["學號換成隨機代碼後，把每位學生的段考成績交給 AI 找出落後學生。", "y", "假名化仍是個資：對照表在校內就能還原。要確認工具的資料使用條款，且只給必要欄位。"],
+  ["健康中心的視力檢查結果，以年級彙總後公布在校網。", "g", "年級層級的彙總，人數夠多、無法指認個人。"],
+  ["把學生的出生日期、居住里別、性別一起交給外部廠商做分析。", "r", "這三個欄位組合起來，幾乎可以唯一指認一個人。"],
+  ["家長會要求學校提供各班前 10 名的名單。", "r", "個人成績排名屬個資，不符合蒐集目的，不應提供。"],
+  ["用 AI 分類教學回饋問卷的開放題（已刪除姓名、班級欄位）。", "y", "開放題的文字裡可能自己寫到姓名或事件，先抽查、遮罩後再交給 AI。"],
+  ["特教學生人數依障礙類別公布在學校網站，其中一類只有 1 人。", "r", "1 個人的類別等於直接公布這位學生的特教身分。"],
+  ["把本班學生的出缺勤明細（保留學號）寄給該班導師。", "g", "導師本來就有權限、也需要知道自己班學生的狀況（最小必要原則）。"],
+];
+const LBL = { g: "綠燈", y: "黃燈", r: "紅燈" };
+document.addEventListener("DOMContentLoaded", async () => {
+  // ---------- A 情境卡 ----------
+  const votes = {};
+  const scoreUpd = () => { const n = Object.keys(votes).length, ok = Object.entries(votes).filter(([i, v]) => CARDS[i][1] === v).length;
+    W.$("#score").textContent = n ? `答對 ${ok} / ${n}` : ""; };
+  CARDS.forEach(([q, a, why], i) => {
+    const ans = W.el("div", { class: "ans" });
+    const card = W.el("div", { class: "card sc" },
+      W.el("div", { class: "q" }, `${i + 1}．${q}`),
+      W.el("div", { class: "vote" }, ["g", "y", "r"].map((v) => W.el("button", { class: "v-" + v, "aria-pressed": "false",
+        onclick: (e) => { votes[i] = v; e.target.parentElement.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b === e.target));
+          ans.className = "ans show " + (v === a ? "ok" : "no"); ans.innerHTML = `<strong>${v === a ? "答對" : "答案是" + LBL[a]}</strong>　${W.esc(why)}`; scoreUpd(); } }, LBL[v]))),
+      ans);
+    card._show = () => { ans.className = "ans show " + (votes[i] === a ? "ok" : "no"); ans.innerHTML = `<strong>${LBL[a]}</strong>　${W.esc(why)}`; };
+    W.$("#cards").append(card);
+  });
+  W.$("#revealAll").onclick = () => W.$$("#cards .card").forEach((c) => c._show());
+
+  // ---------- B 去識別化 ----------
+  const d = await W.json("s3.json");
+  const C = d.deid_cols, R = d.deid;
+  const METHODS = {
+    "學號": ["保留", "假名化", "刪除"], "姓名": ["保留", "遮罩", "刪除"], "出生日期": ["保留", "概化：只留年份", "概化：年級", "刪除"],
+    "班級": ["保留", "概化：年級", "刪除"], "居住區": ["保留", "概化：只留縣市", "刪除"], "數學": ["保留", "概化：分數段", "刪除"],
+    "輔導紀錄": ["保留", "刪除"],
+  };
+  const sel = { 學號: "保留", 姓名: "保留", 出生日期: "保留", 班級: "保留", 居住區: "保留", 數學: "保留", 輔導紀錄: "保留" };
+  const QI = ["出生日期", "班級", "居住區"];    // 準識別欄位
+  const codes = {};
+  R.forEach((r, i) => (codes[r.學號] = "P" + String((i * 37 + 11) % 97).padStart(3, "0")));
+  const tf = (c, v) => {
+    const m = sel[c];
+    if (m === "刪除") return undefined;
+    if (m === "假名化") return codes[v];
+    if (m === "遮罩") return v[0] + "○" + v.slice(2);
+    if (m === "概化：只留年份") return v.slice(0, 4);
+    if (m === "概化：年級") return c === "班級" ? "高三" : "高三（2007 年生）";
+    if (m === "概化：只留縣市") return "桃園市";
+    if (m === "概化：分數段") return v < 60 ? "未滿 60" : v < 80 ? "60–79" : "80 以上";
+    return v;
+  };
+  function opts() {
+    W.$("#opts").replaceChildren(W.el("h3", {}, "每一欄怎麼處理"), ...C.map((c) => W.el("div", { class: "opt" },
+      W.el("strong", { class: "small" }, c, QI.includes(c) ? W.el("div", { class: "faint", style: "font-weight:400;font-size:.72rem" }, "準識別欄位") : ""),
+      W.el("select", { onchange: (e) => { sel[c] = e.target.value; draw(); } }, METHODS[c].map((m) => W.el("option", { selected: sel[c] === m }, m))))),
+      W.el("div", { class: "row", style: "margin-top:10px" },
+        W.el("button", { class: "btn sm green", onclick: () => { Object.assign(sel, { 學號: "假名化", 姓名: "刪除", 出生日期: "概化：年級", 班級: "概化：年級", 居住區: "概化：只留縣市", 數學: "保留", 輔導紀錄: "刪除" }); opts(); draw(); } }, "套用建議做法"),
+        W.el("button", { class: "btn sm ghost", onclick: () => { Object.keys(sel).forEach((k) => (sel[k] = "保留")); opts(); draw(); } }, "全部還原")));
+  }
+  let outCols = [], outRows = [];
+  function draw() {
+    outCols = C.filter((c) => sel[c] !== "刪除");
+    outRows = R.map((r) => outCols.map((c) => tf(c, r[c])));
+    W.table(W.$("#out"), outCols, outRows);
+    // k-匿名：以保留下來的準識別欄位（加上姓名、學號若保留則 k=1）分組
+    let k;
+    if (sel.姓名 === "保留" || sel.學號 === "保留") k = 1;
+    else {
+      const keys = QI.filter((c) => sel[c] !== "刪除");
+      const g = {};
+      R.forEach((r) => { const key = keys.map((c) => tf(c, r[c])).join("|"); g[key] = (g[key] || 0) + 1; });
+      k = keys.length ? Math.min(...Object.values(g)) : R.length;
+    }
+    W.$("#kval").textContent = k;
+    W.$("#kval").style.color = k < 3 ? "var(--orange)" : "var(--green)";
+    W.$("#kmsg").innerHTML = k === 1 ? "<strong>還認得出是誰。</strong>姓名或學號還在，或準識別欄位的組合是唯一的。"
+      : k < 3 ? `<strong>風險偏高。</strong>最小的群組只有 ${k} 人，同學之間仍可能猜得到。`
+      : `<strong>風險降低。</strong>每種條件組合至少有 ${k} 人。` + (sel.輔導紀錄 === "保留" ? "但「輔導紀錄」欄仍不應該離開輔導室。" : "");
+  }
+  W.table(W.$("#raw"), C, R.map((r) => C.map((c) => r[c])));
+  opts(); draw();
+  const toCsv = (cols, rows) => [cols.join(",")].concat(rows.map((r) => r.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))).join("\n");
+  W.$("#dlOut").onclick = () => W.download("去識別化資料.csv", toCsv(outCols, outRows), "text/csv");
+  W.$("#dlMap").onclick = () => W.download("學號對照表_限校內.csv", toCsv(["學號", "代碼"], R.map((r) => [r.學號, codes[r.學號]])), "text/csv");
+});
+</script>
+</body>
+</html>

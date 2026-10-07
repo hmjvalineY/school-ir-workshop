@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>髒資料圖鑑</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script src="../assets/js/common.js"></script>
+</head>
+<body data-root="../" data-lab="s2/gallery" data-time="約 10 分鐘"
+      data-lead="模擬四個系統＋一份表單的匯出格式，問題全部比照真實情況。先在這裡看清楚每個檔案的「病」，再進 Power Query 動手。滑過標色格子看說明。">
+<main class="wrap">
+  <div class="seg" id="tabs" style="margin-bottom:14px"></div>
+  <div class="grid g3">
+    <div class="card stack">
+      <div class="row"><span class="chip" id="role"></span><h3 style="margin:0" id="fname"></h3></div>
+      <ul class="small" id="summary" style="padding-left:1.2em;margin:0"></ul>
+      <div id="sub"></div>
+      <div class="row"><a class="btn sm orange" id="dl" download>下載這個檔</a><a class="btn sm ghost" href="../downloads/第二場_練習資料.zip" download>下載全部（zip）</a></div>
+    </div>
+    <div class="card" style="grid-column: span 2">
+      <h3>標記統計</h3>
+      <div class="grid g4" id="counts"></div>
+      <div class="legend" style="margin-top:12px">
+        <span><i style="background:#ECE9FB"></i>個資欄位</span>
+        <span><i style="background:#FFF3C4"></i>格式／空白</span>
+        <span><i style="background:#FBD9CC"></i>值有問題</span>
+        <span><i style="background:#FDE7E2"></i>整列有問題（重複、標題列、班平均）</span>
+      </div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div class="row" style="margin-bottom:8px"><h3 style="margin:0">檔案內容</h3><span class="spacer"></span>
+      <label class="small"><input type="checkbox" id="onlyMarked"> 只看有標記的列</label></div>
+    <div class="tablewrap" id="tbl" style="max-height:600px"></div>
+  </div>
+</main>
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  const D = await W.json("s2.json");
+  const K = { pii: "個資欄位", space: "多餘空白", format: "格式不一", number: "學號存成數字", acct: "帳號異常", absent: "「缺」", missing: "空白未登錄",
+    fullwidth: "全形數字", typo: "打錯無法修正", unmatched: "對照表找不到", dup: "重複", header: "重複標題列", avg: "班平均列", title: "報表標題", blank: "空白列" };
+  const DL = { roster: "系統A_學生名冊.xlsx", score: "系統B_段考成績.xlsx", lp: "系統D_學習歷程.csv", form: "表單_活動報名.xlsx", map: "對照表.xlsx" };
+  let cur = D.files[0], sub = null;
+  function view() {
+    // 回傳 {cols, rows, marks, headMarks, href}
+    if (cur.id === "att") {
+      const m = cur.months[sub]; const rows = m.rows;
+      return { cols: rows[0], rows: rows.slice(1), marks: m.marks.filter((x) => x.r > 0).map((x) => ({ ...x, r: x.r - 1 })), headMarks: m.marks.filter((x) => x.r === 0),
+        href: `../downloads/s2/練習資料/${m.later ? "下個月才會拿到" : "出缺席_每月匯出"}/${sub}`, note: `編碼：${m.enc === "cp950" ? "Big5（950）" : "UTF-8"}` };
+    }
+    if (cur.id === "map") { const rows = cur.sheets[sub]; return { cols: rows[0], rows: rows.slice(1), marks: [], headMarks: [], href: "../downloads/s2/練習資料/對照表.xlsx" }; }
+    if (cur.id === "score") {   // 報表格式：沒有真正的標題列
+      const n = Math.max(...cur.rows.map((r) => r.length));
+      return { cols: Array.from({ length: n }, (_, i) => String.fromCharCode(65 + i)), rows: cur.rows, marks: cur.marks, headMarks: [], href: "../downloads/s2/練習資料/" + DL.score };
+    }
+    return { cols: cur.rows[0], rows: cur.rows.slice(1), marks: cur.marks.filter((x) => x.r > 0).map((x) => ({ ...x, r: x.r - 1 })),
+      headMarks: cur.marks.filter((x) => x.r === 0), href: "../downloads/s2/練習資料/" + DL[cur.id], note: cur.enc ? `編碼：${cur.enc === "utf-8-sig" ? "UTF-8" : cur.enc}` : "" };
+  }
+  function draw() {
+    W.$("#tabs").replaceChildren(...D.files.map((f) => W.el("button", { "aria-pressed": f === cur, onclick: () => { cur = f; sub = null; draw(); } }, f.name.replace(/\.(xlsx|csv)$/, "").replace(/^出缺席_每月匯出／/, ""))));
+    if (cur.id === "att" && !sub) sub = Object.keys(cur.months)[0];
+    if (cur.id === "map" && !sub) sub = "身分對照";
+    W.$("#role").textContent = cur.role; W.$("#fname").textContent = cur.name;
+    W.$("#summary").replaceChildren(...cur.summary.map((s) => W.el("li", {}, s)));
+    const subs = cur.id === "att" ? Object.keys(cur.months) : cur.id === "map" ? Object.keys(cur.sheets) : [];
+    W.$("#sub").replaceChildren(subs.length ? W.el("div", { class: "seg" }, subs.map((k) => W.el("button", { "aria-pressed": k === sub, onclick: () => { sub = k; draw(); } },
+      k.replace("系統C_出缺席_", "").replace(".csv", "") + (cur.id === "att" && cur.months[k].later ? "（下個月）" : "")))) : "");
+    const v = view();
+    W.$("#dl").href = encodeURI(v.href);
+    const all = [...v.marks, ...v.headMarks];
+    const cnt = {};
+    all.forEach((m) => (cnt[m.k] = (cnt[m.k] || 0) + 1));
+    W.$("#counts").replaceChildren(...Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([k, n]) => W.el("div", { class: "stat" }, W.el("b", {}, n), W.el("span", {}, K[k] || k))),
+      W.el("div", { class: "stat" }, W.el("b", {}, v.rows.length), W.el("span", {}, "資料列數" + (v.note ? "｜" + v.note : ""))));
+    if (!all.length) W.$("#counts").prepend(W.el("p", { class: "small muted", style: "grid-column:1/-1" }, cur.id === "map" ? "對照表本身是乾淨的；問題在於它「少了誰」：轉入生 111204 還沒寫進身分對照。" : "沒有標記。"));
+    let rows = v.rows, marks = v.marks, idx = rows.map((_, i) => i);
+    if (W.$("#onlyMarked").checked) {
+      const keep = new Set(marks.map((m) => m.r)); idx = idx.filter((i) => keep.has(i));
+      const map = new Map(idx.map((i, j) => [i, j])); rows = idx.map((i) => v.rows[i]); marks = marks.filter((m) => map.has(m.r)).map((m) => ({ ...m, r: map.get(m.r) }));
+    }
+    W.table(W.$("#tbl"), v.cols, rows, { marks, headMarks: v.headMarks, rowNum: 0, max: 400 });
+    W.$$("#tbl tbody tr").forEach((tr, j) => (tr.firstChild.textContent = idx[j] + (cur.id === "score" ? 1 : 2)));
+  }
+  W.$("#onlyMarked").onchange = draw;
+  draw();
+});
+</script>
+</body>
+</html>

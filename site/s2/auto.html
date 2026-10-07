@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>自動化示範</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script src="../assets/js/common.js"></script>
+<style>
+  .folder { min-height: 190px; border: 2px dashed var(--line); border-radius: 12px; padding: 12px; background: #FAFBFC; transition: background .2s, border-color .2s; }
+  .folder.over { background: var(--green-bg); border-color: var(--green); }
+  .folder h3 { display: flex; gap: 8px; align-items: center; }
+  .file { display: flex; gap: 10px; align-items: center; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 6px 0; cursor: grab; font-size: .9rem; }
+  .file.new { border-color: var(--orange); box-shadow: 0 0 0 3px var(--orange-bg); }
+  .file .ic { width: 30px; height: 36px; border-radius: 4px; background: var(--green); color: #fff; font-size: .62rem; font-weight: 700; display: grid; place-items: center; }
+  .log { font-family: var(--mono); font-size: .8rem; background: #1F2329; color: #CFE9DE; border-radius: 8px; padding: 10px 12px; min-height: 120px; white-space: pre-wrap; }
+  .stale { color: var(--orange); font-weight: 700; }
+</style>
+</head>
+<body data-root="../" data-lab="s2/auto" data-time="約 5 分鐘"
+      data-lead="12 月的出缺席檔來了，你要做什麼？答案是：把檔案丟進資料夾，按一下「全部重新整理」。查詢接的是「資料夾」，所以新檔會自動被合併、清洗、檢核。">
+<main class="wrap">
+  <div class="grid g3">
+    <div class="folder" id="later" data-folder="later"><h3>📁 下個月才會拿到</h3><p class="small muted">生輔組 1 月初才會匯出 12 月的檔。把它拖到右邊的資料夾（或點檔案）。</p><div class="files"></div></div>
+    <div class="folder" id="watch" data-folder="watch"><h3>📂 出缺席_每月匯出</h3><p class="small muted">Power Query 的「從資料夾」接的就是這裡。</p><div class="files"></div></div>
+    <div class="card stack">
+      <h3>Excel 整合報表</h3>
+      <div class="row"><button class="btn green" id="refresh">資料 ▸ 全部重新整理</button><button class="btn sm ghost" id="reset">重來</button></div>
+      <p class="small" id="status"></p>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+  <div class="grid g3" style="margin-top:16px">
+    <div class="card"><div class="grid g2" id="stats"></div><p class="small faint" style="margin-top:10px">標準答案：9–11 月清洗後 443 筆；加入 12 月後 603 筆。</p></div>
+    <div class="card" style="grid-column: span 2"><h3>各月份、各假別筆數</h3><div style="height:260px"><canvas id="ch"></canvas></div></div>
+  </div>
+  <div class="grid g2" style="margin-top:16px">
+    <div class="callout navy"><p><strong>L2 半自動：</strong>檔案位置固定、格式不變，每月只要「丟檔＋按一下」。</p>
+      <p class="small">回校第一步：排進行事曆——每月 5 日丟檔、按重新整理。</p></div>
+    <div class="callout"><p class="small"><strong>想再進一步（L3）：</strong>Google 路線用共用雲端硬碟＋Apps Script 時間觸發；微軟路線用 SharePoint 資料夾＋Power BI 排程重新整理。步驟見講義 F。</p></div>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  W.chartDefaults();
+  const D = await W.json("s2.json");
+  const months = D.files.find((f) => f.id === "att").months;
+  const names = Object.keys(months);
+  let place = {}, report = null;
+  const reset = () => { place = Object.fromEntries(names.map((n) => [n, months[n].later ? "later" : "watch"])); report = build(names.filter((n) => place[n] === "watch")); W.$("#log").textContent = "（尚未重新整理）"; draw(); };
+  function build(files) {
+    const seen = new Set(); let raw = 0; const rows = [];
+    files.forEach((n) => months[n].rows.slice(1).forEach((r) => { raw++; const t = [...r]; t[3] = t[3].trim(); const k = t.join("|"); if (!seen.has(k)) { seen.add(k); rows.push(t); } }));
+    return { files: [...files], raw, rows, at: new Date() };
+  }
+  const LEAVES = ["病假", "事假", "公假", "遲到", "曠課"];
+  const COLORS = [W.color.purple, W.color.orange, W.color.green, W.color.gold, W.color.navy];
+  const ch = new Chart(W.$("#ch"), { type: "bar", data: { labels: [], datasets: [] }, options: { scales: { x: { stacked: true }, y: { stacked: true } }, plugins: { legend: { position: "right" } } } });
+  function draw() {
+    ["later", "watch"].forEach((f) => {
+      const box = W.$(`#${f} .files`);
+      box.replaceChildren(...names.filter((n) => place[n] === f).map((n) => W.el("div", { class: "file" + (f === "watch" && !report.files.includes(n) ? " new" : ""), draggable: "true",
+        ondragstart: (e) => e.dataTransfer.setData("text", n), onclick: () => { place[n] = place[n] === "later" ? "watch" : "later"; draw(); } },
+        W.el("span", { class: "ic" }, "CSV"), W.el("span", {}, n, W.el("div", { class: "small faint" }, `${months[n].rows.length - 1} 列・Big5`)))));
+    });
+    const inFolder = names.filter((n) => place[n] === "watch");
+    const stale = inFolder.length !== report.files.length || inFolder.some((n) => !report.files.includes(n));
+    W.$("#status").innerHTML = stale ? `<span class="stale">資料夾內容變了，但報表還沒更新。</span>按「全部重新整理」。` : `報表是最新的（${report.files.length} 個檔，${report.at.toLocaleTimeString("zh-TW")} 更新）。`;
+    const stat = (cls, n, l) => W.el("div", { class: "stat " + cls }, W.el("b", {}, n), W.el("span", {}, l));
+    W.$("#stats").replaceChildren(stat("", report.files.length, "已合併的檔案"), stat("", report.raw, "原始列數"), stat("green", report.rows.length, "清洗後列數"), stat("orange", report.raw - report.rows.length, "去掉的重複"));
+    const ms = report.files.map((n) => n.match(/(\d{5})/)[1]).sort();
+    ch.data.labels = ms.map((m) => `${m.slice(0, 3)}/${m.slice(3)}`);
+    ch.data.datasets = LEAVES.map((lv, i) => ({ label: lv, backgroundColor: COLORS[i], data: ms.map((m) => report.rows.filter((r) => r[6] === lv && r[0].replace(/\//g, "").startsWith(m)).length) }));
+    ch.update();
+  }
+  ["later", "watch"].forEach((f) => {
+    const el = W.$("#" + f);
+    el.addEventListener("dragover", (e) => { e.preventDefault(); el.classList.add("over"); });
+    el.addEventListener("dragleave", () => el.classList.remove("over"));
+    el.addEventListener("drop", (e) => { e.preventDefault(); el.classList.remove("over"); const n = e.dataTransfer.getData("text"); if (n) { place[n] = f; draw(); } });
+  });
+  W.$("#refresh").onclick = async () => {
+    const files = names.filter((n) => place[n] === "watch").sort();
+    const log = W.$("#log"); log.textContent = "";
+    const say = (s) => new Promise((ok) => setTimeout(() => { log.textContent += s + "\n"; ok(); }, 260));
+    W.$("#refresh").disabled = true;
+    await say(`來源 = Folder.Files("…\\出缺席_每月匯出")　→ ${files.length} 個檔案`);
+    for (const n of files) await say(`  解析 ${n}（Encoding = 950）　${months[n].rows.length - 1} 列`);
+    await say("修剪 = Text.Trim(學號)");
+    const r = build(files);
+    await say(`去重 = Table.Distinct　${r.raw} → ${r.rows.length} 列`);
+    await say("西元日期、學年學期 …　完成");
+    await say("檢核_出缺席找不到名冊 …　完成");
+    report = r; W.$("#refresh").disabled = false; draw();
+    W.toast("重新整理完成");
+  };
+  W.$("#reset").onclick = reset;
+  reset();
+});
+</script>
+</body>
+</html>

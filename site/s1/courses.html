@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Q1 熱門不等於有效</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script src="../assets/js/common.js"></script>
+<style> #tbl tbody tr { cursor: pointer; } </style>
+</head>
+<body data-root="../" data-lab="s1/courses" data-time="約 8 分鐘"
+      data-lead="哪些課「叫好不叫座」，哪些「叫座不叫好」？把選課人數、滿意度、缺席率放在同一張圖上看。點圖上的泡泡或表格的列，看這門課的三個排名。">
+<main class="wrap">
+  <div class="grid g3">
+    <div class="card" style="grid-column: span 2">
+      <div class="row"><h3 style="margin:0">選課人數 × 滿意度（泡泡大小＝平均缺席次數）</h3><span class="spacer"></span>
+        <div class="seg" id="type"></div></div>
+      <div style="height:380px;margin-top:8px"><canvas id="ch"></canvas></div>
+    </div>
+    <div class="card stack" id="detail"></div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <h3>各課程指標（點欄名排序）</h3>
+    <div class="tablewrap" id="tbl"></div>
+  </div>
+  <div class="callout navy" style="margin-top:16px"><p><strong>報名爆滿只證明它的名字吸引人，不證明學生留得住、學得好。</strong></p>
+    <p class="small">樞紐分析：列＝課程名稱；值＝學生代號（計數）、課程滿意度（平均）、缺席次數（平均）。三個值並排，排名就說話了。</p></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  W.chartDefaults();
+  const D = await W.json("s1.json");
+  const rows = D.courses.rows;   // 學生代號,學年學期,課程名稱,課程類型,開課時段,教師,缺席,成績,滿意度
+  const types = ["全部", ...new Set(rows.map((r) => r[3]))];
+  let ty = "全部", sortK = "n", sortD = -1, pick = "AI 與生活";
+  const agg = () => {
+    const g = {};
+    rows.filter((r) => ty === "全部" || r[3] === ty).forEach((r) => { const c = (g[r[2]] = g[r[2]] || { name: r[2], type: r[3], n: 0, abs: [], score: [], sat: [] });
+      c.n++; c.abs.push(r[6]); c.score.push(r[7]); c.sat.push(r[8]); });
+    const L = Object.values(g).map((c) => ({ ...c, abs: W.mean(c.abs), score: W.mean(c.score), sat: W.mean(c.sat) }));
+    const rank = (k, dir) => { const s = [...L].sort((a, b) => dir * (b[k] - a[k])); s.forEach((c, i) => (c["r_" + k] = i + 1)); };
+    rank("n", 1); rank("sat", 1); rank("abs", 1); rank("score", 1);
+    return L;
+  };
+  const ch = new Chart(W.$("#ch"), { type: "bubble", data: { datasets: [] }, options: {
+    scales: { x: { title: { display: true, text: "選課人數（人次）" } }, y: { title: { display: true, text: "平均滿意度（1–5）" }, suggestedMin: 2.8, suggestedMax: 4.6 } },
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${c.raw.name}：${c.raw.x} 人、滿意度 ${c.raw.y.toFixed(2)}、缺席 ${c.raw.abs.toFixed(2)} 次` } } },
+    onClick: (e, els) => { if (els.length) { pick = ch.data.datasets[0].data[els[0].index].name; draw(); } } } });
+  function draw() {
+    W.$("#type").replaceChildren(...types.map((t) => W.el("button", { "aria-pressed": t === ty, onclick: () => { ty = t; draw(); } }, t)));
+    const L = agg(); if (!L.find((c) => c.name === pick)) pick = L[0] && L[0].name;
+    ch.data.datasets = [{ data: L.map((c) => ({ x: c.n, y: c.sat, r: 5 + c.abs * 6, name: c.name, abs: c.abs })),
+      backgroundColor: L.map((c) => (c.name === pick ? "rgba(216,90,48,.75)" : "rgba(83,74,183,.35)")), borderColor: L.map((c) => (c.name === pick ? "#D85A30" : "#534AB7")) }];
+    ch.update();
+    const c = L.find((x) => x.name === pick), N = L.length;
+    const rk = (r, good) => W.el("span", { class: "chip " + (good ? "green" : r > N / 2 ? "orange" : "") }, r <= N / 2 ? `全校第 ${r}` : `倒數第 ${N - r + 1}`);
+    W.$("#detail").replaceChildren(W.el("h3", {}, c.name), W.el("p", { class: "small muted" }, c.type),
+      W.el("div", { class: "row" }, W.el("span", {}, "選課人數"), W.el("span", { class: "spacer" }), W.el("strong", {}, c.n), rk(c.r_n, c.r_n <= 2)),
+      W.el("div", { class: "row" }, W.el("span", {}, "期末滿意度"), W.el("span", { class: "spacer" }), W.el("strong", {}, c.sat.toFixed(2)), rk(c.r_sat, c.r_sat <= 2)),
+      W.el("div", { class: "row" }, W.el("span", {}, "平均缺席次數"), W.el("span", { class: "spacer" }), W.el("strong", {}, c.abs.toFixed(2)),
+        W.el("span", { class: "chip " + (c.r_abs <= 2 ? "orange" : "") }, c.r_abs === 1 ? "全校最高" : `第 ${c.r_abs} 高`)),
+      W.el("div", { class: "row" }, W.el("span", {}, "平均期末成績"), W.el("span", { class: "spacer" }), W.el("strong", {}, c.score.toFixed(1))),
+      W.el("div", { class: "callout small" }, c.r_n === 1 && c.r_sat > N / 2 ? "叫座不叫好：名字吸引人，但留不住學生。接下來要問的是：課程內容、授課方式，還是期待落差？"
+        : c.r_sat <= 2 && c.r_n > N / 2 ? "叫好不叫座：上過的人滿意，但選的人少。也許是時段、宣傳或課名的問題。" : "把三個指標一起看，再決定要擴大、調整或停開。"));
+    const S = [...L].sort((a, b) => sortD * (a[sortK] > b[sortK] ? 1 : a[sortK] < b[sortK] ? -1 : 0));
+    const K = [["name", "課程"], ["type", "類型"], ["n", "選課人數"], ["sat", "平均滿意度"], ["abs", "平均缺席"], ["score", "平均成績"]];
+    W.table(W.$("#tbl"), K.map((k) => k[1] + (k[0] === sortK ? (sortD < 0 ? " ▼" : " ▲") : "")), S.map((c) => [c.name, c.type, c.n, +c.sat.toFixed(2), +c.abs.toFixed(2), +c.score.toFixed(1)]),
+      { rowClass: (i) => (S[i].name === pick ? "hl" : "") });
+    W.$$("#tbl thead th").forEach((th, j) => { th.style.cursor = "pointer"; th.onclick = () => { if (sortK === K[j][0]) sortD *= -1; else { sortK = K[j][0]; sortD = -1; } draw(); }; });
+    W.$$("#tbl tbody tr").forEach((tr, i) => (tr.onclick = () => { pick = S[i].name; draw(); }));
+  }
+  draw();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Power Query</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script src="../assets/js/common.js"></script>
+<style>
+  td.sel, th.sel { background: #FFF3C4 !important; color: var(--ink) !important; }
+  .path { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: .85rem; }
+  .path span { background: #E7ECF5; color: var(--navy); border-radius: 6px; padding: 2px 8px; font-weight: 600; }
+</style>
+</head>
+<body data-root="../" data-lab="s1/powerquery" data-time="搭配簡報第二段"
+      data-lead="Power Query 裡最重要的兩個動作：逆透視（寬表變長表）與合併查詢（兩張表用代號接起來）。按按鈕一步一步看，再回 Excel 自己做一次。">
+<main class="wrap">
+  <h2 style="margin-top:0">A　逆透視資料行：段考成績</h2>
+  <div class="grid g3">
+    <div class="card stack">
+      <div class="path"><span>點選段考成績</span>▸<span>選取五個科目欄</span>▸<span>轉換</span>▸<span>逆透視資料行</span></div>
+      <p class="small">為什麼要逆透視？五科各占一欄時，「依科目比較」「篩選某一科」都很難做；變成「科目」「成績」兩欄後，樞紐分析表就能直接拖拉。</p>
+      <div class="row">
+        <button class="btn sm" id="u1">① 選取五個科目欄</button>
+        <button class="btn sm green" id="u2" disabled>② 逆透視資料行</button>
+        <button class="btn sm ghost" id="u3" disabled>③ 改欄名</button>
+        <button class="btn sm ghost" id="u0">重來</button>
+      </div>
+      <div class="grid g2" id="ustat"></div>
+    </div>
+    <div class="card" style="grid-column: span 2"><div class="tablewrap" id="ut" style="max-height:420px"></div></div>
+  </div>
+
+  <h2>B　合併查詢：把班級接到學習歷程</h2>
+  <div class="grid g3">
+    <div class="card stack">
+      <div class="path"><span>點選學習歷程</span>▸<span>常用</span>▸<span>合併查詢</span>▸<span>選學生名冊</span>▸<span>兩邊都點學生代號</span></div>
+      <p class="small">學習歷程只有「學生代號」，沒有班級、入學成績分組——要分組比較，就得從名冊接過來。</p>
+      <div class="row">
+        <button class="btn sm" id="j1">① 合併查詢</button>
+        <button class="btn sm green" id="j2" disabled>② 展開三個欄位</button>
+        <button class="btn sm ghost" id="j0">重來</button>
+      </div>
+      <p class="small muted" id="jmsg"></p>
+    </div>
+    <div class="card" style="grid-column: span 2">
+      <div class="grid g2">
+        <div><h3>學習歷程（前 12 列）</h3><div class="tablewrap" id="jl" style="max-height:380px"></div></div>
+        <div><h3>學生名冊</h3><div class="tablewrap" id="jr" style="max-height:380px"></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="callout" style="margin-top:16px"><p class="small">完整操作步驟見 <a href="../downloads/s1/講義A_Excel_Power_Query_逐步操作.pdf" download>講義 A</a>；練習檔：<a href="../downloads/s1/模擬校務資料_研習用.xlsx" download>模擬校務資料_研習用.xlsx</a></p></div>
+</main>
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  const D = await W.json("s1.json");
+  const SUBJ = ["國文", "英文", "數學", "自然", "社會"];
+  // ---------- A 逆透視 ----------
+  const wide = D.exams.rows.filter((r) => r[1] === "111-1").slice(0, 6);
+  let ust = 0;
+  const stat = (n, l, cls) => W.el("div", { class: "stat " + (cls || "") }, W.el("b", {}, n), W.el("span", {}, l));
+  function udraw() {
+    if (ust < 2) {
+      W.table(W.$("#ut"), D.exams.cols, wide, { cellClass: (i, j) => (ust === 1 && j >= 2 ? "sel" : "") });
+      if (ust === 1) W.$$("#ut thead th").forEach((th, j) => j >= 2 && th.classList.add("sel"));
+      W.$("#ustat").replaceChildren(stat(D.exams.rows.length, "全表列數（寬）"), stat(D.exams.cols.length, "欄數"));
+    } else {
+      const long = wide.flatMap((r) => SUBJ.map((s, k) => [r[0], r[1], s, r[k + 2]]));
+      const cols = ust === 2 ? ["學生代號", "學年學期", "屬性", "值"] : ["學生代號", "學年學期", "科目", "成績"];
+      W.table(W.$("#ut"), cols, long, { cellClass: (i, j) => (j >= 2 ? "changed" : "") });
+      W.$("#ustat").replaceChildren(stat(D.exams.rows.length * 5, "全表列數（長）", "green"), stat(4, "欄數"));
+    }
+    W.$("#u2").disabled = ust !== 1; W.$("#u3").disabled = ust !== 2;
+  }
+  W.$("#u1").onclick = () => { ust = 1; udraw(); };
+  W.$("#u2").onclick = () => { ust = 2; udraw(); W.toast("每位學生、每一科變成一列：列數 ×5"); };
+  W.$("#u3").onclick = () => { ust = 3; udraw(); };
+  W.$("#u0").onclick = () => { ust = 0; udraw(); };
+  udraw();
+  // ---------- B 合併 ----------
+  const lp = D.lp.rows.filter((r) => r[1] === "112-1").slice(0, 12);
+  const R = Object.fromEntries(D.roster.rows.map((r) => [r[0], r]));
+  let jst = 0;
+  function jdraw() {
+    W.table(W.$("#jr"), D.roster.cols, D.roster.rows, { max: 60, cellClass: (i, j) => (jst >= 1 && j === 0 ? "sel" : jst === 2 && [2, 3, 4].includes(j) ? "changed" : "") });
+    if (jst === 0) { W.table(W.$("#jl"), D.lp.cols, lp); W.$("#jmsg").textContent = ""; }
+    else if (jst === 1) {
+      W.table(W.$("#jl"), [...D.lp.cols, "學生名冊"], lp.map((r) => [...r, "Table"]), { cellClass: (i, j) => (j === 0 ? "sel" : j === 5 ? "changed" : "") });
+      W.$("#jmsg").textContent = "最右邊多了一欄「學生名冊」，每格都是一個 Table：代表對到的那一列名冊資料。";
+    } else {
+      W.table(W.$("#jl"), [...D.lp.cols, "班級", "班群", "入學成績分組"], lp.map((r) => [...r, R[r[0]][2], R[r[0]][3], R[r[0]][4]]), { cellClass: (i, j) => (j >= 5 ? "changed" : "") });
+      W.$("#jmsg").textContent = "展開時先取消「選取所有資料行」，只勾班級、班群、入學成績分組，並取消「使用原始資料行名稱作為前置詞」。";
+    }
+    W.$("#j2").disabled = jst !== 1;
+  }
+  W.$("#j1").onclick = () => { jst = 1; jdraw(); };
+  W.$("#j2").onclick = () => { jst = 2; jdraw(); };
+  W.$("#j0").onclick = () => { jst = 0; jdraw(); };
+  jdraw();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>小操作五</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script src="../assets/js/common.js"></script>
+<style>
+  .flow { display: flex; flex-direction: column; gap: 0; }
+  .step { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; background: #fff; border: 1px solid var(--line);
+    border-radius: 10px; padding: 10px 12px; }
+  .step.gate { border: 2px solid var(--orange); background: var(--orange-bg); }
+  .step .n { width: 28px; height: 28px; border-radius: 50%; background: var(--navy); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: .85rem; }
+  .step.gate .n { background: var(--orange); }
+  .step input[type=text] { padding: 4px 8px; font-size: .85rem; }
+  .step .ctl { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+  .arrow { text-align: center; color: var(--faint); line-height: 1.2; font-size: 1.1rem; }
+  .who { font-size: .78rem; }
+  .palette button { margin: 3px; }
+  .icon { border: 1px solid var(--line); background: #fff; border-radius: 6px; cursor: pointer; padding: 2px 7px; font: inherit; font-size: .8rem; }
+  .icon.on { background: var(--orange); color: #fff; border-color: var(--orange); }
+</style>
+</head>
+<body data-root="../" data-lab="s3/workflow" data-time="約 15 分鐘"
+      data-lead="混合分組（教授、校長、主任各至少一人），選一個真實議題，排出工作流的每一步，再用紅筆標出治理檢查點。">
+<main class="wrap">
+  <div class="grid g3">
+    <div class="card stack">
+      <h3>1　選議題</h3>
+      <div class="seg" id="topics"></div>
+      <p class="small muted">會載入一條範例流程，你可以增刪、調整順序。</p>
+      <h3>2　加入步驟</h3>
+      <div class="palette" id="palette"></div>
+      <div class="row"><input type="text" id="custom" placeholder="自訂步驟名稱" style="flex:1"><button class="btn sm" id="add">加入</button></div>
+    </div>
+    <div class="card" style="grid-column: span 2">
+      <div class="row" style="margin-bottom:10px"><h3 style="margin:0">3　工作流</h3><span class="spacer"></span>
+        <span class="small muted">點 <span class="icon on">檢查點</span> 標出治理檢查點</span></div>
+      <div class="flow" id="flow"></div>
+    </div>
+  </div>
+  <div class="grid g2" style="margin-top:16px">
+    <div class="card">
+      <h3>4　治理檢查點清單</h3>
+      <div id="qs" class="stack"></div>
+    </div>
+    <div class="card stack">
+      <h3>5　分享與帶走</h3>
+      <p class="small">每組 1 分鐘分享：<strong>哪一個檢查點最難落實？</strong></p>
+      <div><label class="field">最難落實的檢查點與原因</label><textarea id="hard"></textarea></div>
+      <div class="row"><button class="btn sm" id="export">下載工作流（文字檔）</button><button class="btn sm ghost" onclick="print()">列印</button></div>
+      <div class="callout small">人在迴路中（Human-in-the-loop）本身就是治理：AI 負責整理與標記，是否通知、如何介入，由人最後拍板。</div>
+    </div>
+  </div>
+</main>
+<script>
+const PRESETS = {
+  "每月出缺勤預警": [["匯入出缺勤資料", "系統"], ["品質檢核", "系統", 1], ["去識別化", "系統", 1], ["風險標記", "AI"], ["通知草稿", "AI"], ["人工核可", "生輔組長", 1], ["通知導師", "系統"], ["四週後追蹤成效", "導師"]],
+  "補救教學成效": [["匯入段考成績", "系統"], ["品質檢核", "系統", 1], ["篩選補救名單", "教務處"], ["家長同意", "導師", 1], ["補救課程", "任課教師"], ["前後測比較（含對照組）", "教務處"], ["結果判讀", "教學研究會", 1], ["調整課程", "教務處"]],
+  "選課輔導": [["匯出選課志願", "系統"], ["串接生涯量表", "輔導室", 1], ["標記高風險組合", "AI"], ["課程諮詢教師確認", "諮詢教師", 1], ["個別晤談", "諮詢教師"], ["追蹤退選率", "教務處"]],
+};
+const PALETTE = ["匯入資料", "品質檢核", "去識別化", "串接其他處室資料", "AI 分析／標記", "產出名單", "通知草稿", "人工核可", "通知家長", "個別介入", "追蹤成效", "修正閾值", "刪除過期資料"];
+const QS = ["誰授權這份資料被使用？", "哪一步完成去識別化？", "AI 的輸出由誰核可？", "資料保存多久、何時刪除？", "家長能看到哪些結果？"];
+let topic = "每月出缺勤預警", flow = [];
+const KEY = "ir-workflow";
+function load() { try { const s = JSON.parse(localStorage.getItem(KEY)); if (s) { topic = s.topic; flow = s.flow; return s; } } catch (e) {} return null; }
+function save(extra) { try { localStorage.setItem(KEY, JSON.stringify({ topic, flow, qs: W.$$("#qs textarea").map((t) => t.value), hard: W.$("#hard").value })); } catch (e) {} }
+function preset(t) { topic = t; flow = PRESETS[t].map(([name, who, gate]) => ({ name, who, gate: !!gate })); }
+function draw() {
+  W.$("#topics").replaceChildren(...Object.keys(PRESETS).map((t) => W.el("button", { "aria-pressed": t === topic, onclick: () => { if (confirm("載入範例會取代目前的流程，確定嗎？")) { preset(t); draw(); } } }, t)));
+  const box = W.$("#flow"); box.replaceChildren();
+  flow.forEach((s, i) => {
+    if (i) box.append(W.el("div", { class: "arrow" }, "↓"));
+    box.append(W.el("div", { class: "step" + (s.gate ? " gate" : "") },
+      W.el("div", { class: "n" }, i + 1),
+      W.el("div", { class: "row" },
+        W.el("input", { type: "text", value: s.name, style: "flex:2;min-width:140px", oninput: (e) => { s.name = e.target.value; save(); } }),
+        W.el("input", { type: "text", value: s.who, placeholder: "負責：人／AI／系統", class: "who", style: "flex:1;min-width:110px", oninput: (e) => { s.who = e.target.value; save(); } })),
+      W.el("div", { class: "ctl" },
+        W.el("button", { class: "icon" + (s.gate ? " on" : ""), title: "治理檢查點", onclick: () => { s.gate = !s.gate; draw(); } }, "檢查點"),
+        W.el("button", { class: "icon", title: "上移", onclick: () => { if (i) { [flow[i - 1], flow[i]] = [flow[i], flow[i - 1]]; draw(); } } }, "↑"),
+        W.el("button", { class: "icon", title: "下移", onclick: () => { if (i < flow.length - 1) { [flow[i + 1], flow[i]] = [flow[i], flow[i + 1]]; draw(); } } }, "↓"),
+        W.el("button", { class: "icon", title: "刪除", onclick: () => { flow.splice(i, 1); draw(); } }, "×"))));
+  });
+  if (!flow.length) box.append(W.el("p", { class: "muted small" }, "從左邊加入步驟。"));
+  save();
+}
+document.addEventListener("DOMContentLoaded", () => {
+  const s = load();
+  if (!s) preset(topic);
+  W.$("#palette").replaceChildren(...PALETTE.map((p) => W.el("button", { class: "btn sm ghost", onclick: () => { flow.push({ name: p, who: "", gate: /核可|去識別|檢核|刪除/.test(p) }); draw(); } }, "+ " + p)));
+  W.$("#add").onclick = () => { const v = W.$("#custom").value.trim(); if (v) { flow.push({ name: v, who: "", gate: false }); W.$("#custom").value = ""; draw(); } };
+  W.$("#qs").replaceChildren(...QS.map((q, i) => W.el("div", {}, W.el("label", { class: "field" }, q),
+    W.el("textarea", { style: "min-height:52px", oninput: () => save() }, (s && s.qs && s.qs[i]) || ""))));
+  W.$("#hard").value = (s && s.hard) || "";
+  W.$("#hard").oninput = () => save();
+  W.$("#export").onclick = () => {
+    const lines = [`工作流：${topic}`, ""].concat(flow.map((x, i) => `${i + 1}. ${x.name}${x.who ? "（" + x.who + "）" : ""}${x.gate ? "　◆治理檢查點" : ""}`),
+      ["", "治理檢查點清單"], QS.map((q, i) => `・${q}\n  ${W.$$("#qs textarea")[i].value || "（未填）"}`), ["", "最難落實的檢查點：", W.$("#hard").value || "（未填）"]);
+    W.download(`工作流_${topic}.txt`, lines.join("\n"));
+  };
+  draw();
+});
+</script>
+</body>
+</html>

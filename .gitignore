@@ -1,0 +1,11 @@
+# 建置產物（由 scripts/build_site_data.py 產生，GitHub Actions 部署時會重建）
+site/data/
+site/downloads/
+site/s1/dashboard-example.html
+
+__pycache__/
+*.pyc
+.claude/
+.DS_Store
+Thumbs.db
+~$*

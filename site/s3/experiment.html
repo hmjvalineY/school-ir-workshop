@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>開場實驗</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script src="../assets/js/common.js"></script>
+</head>
+<body data-root="../" data-lab="s3/experiment" data-time="約 10 分鐘"
+      data-lead="同一個問題、同一條規則：「哪些學生有學習落後風險？」用髒資料算一次，再用乾淨資料算一次，名單會不一樣。">
+<main class="wrap">
+  <div class="grid g3">
+    <div class="card stack">
+      <h3>1　題目與規則</h3>
+      <p><strong>哪些學生有學習落後風險？</strong></p>
+      <p class="small">規則：國文、英文、數學三科平均 <strong>低於 60 分</strong>，或本學期缺曠 <strong>15 節以上</strong>。</p>
+      <p class="small muted">資料：<a href="../downloads/s3/治理研習_髒資料_學生學習.xlsx" download>治理研習_髒資料_學生學習.xlsx</a>（58 列，模擬資料）</p>
+    </div>
+    <div class="card stack">
+      <h3>2　現場真的丟給 AI</h3>
+      <p class="small">複製資料與提示詞，貼到任何一個 AI 對話。AI 通常會很有自信地給出一份名單。</p>
+      <div class="row"><button class="btn sm" id="copyPrompt">複製提示詞＋資料</button></div>
+      <p class="small faint">全部是模擬資料，可以安心貼。真實資料請先看第三場「小操作三」。</p>
+    </div>
+    <div class="card stack">
+      <h3>3　在這裡對照</h3>
+      <p class="small">按下面三個按鈕：先照規則直接算，再揭露資料問題，最後用乾淨資料重算。</p>
+      <div class="row">
+        <button class="btn sm orange" id="b1">① 直接算</button>
+        <button class="btn sm ghost" id="b2" disabled>② 揭露問題</button>
+        <button class="btn sm green" id="b3" disabled>③ 乾淨資料重算</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid g4" style="margin-top:16px" id="stats"></div>
+
+  <div class="card" style="margin-top:16px" id="cmpCard" hidden>
+    <h3>兩份名單的差別</h3>
+    <div class="grid g3" id="cmp"></div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="row" style="margin-bottom:8px">
+      <h3 style="margin:0">原始資料</h3><span class="spacer"></span>
+      <div class="legend" id="legend" hidden>
+        <span><i style="background:#FBD9CC"></i>有問題的格子（滑過看說明）</span>
+        <span><i style="background:#FDE7E2"></i>重複列</span>
+        <span><i style="background:#F8F2DD"></i>被列入名單</span>
+      </div>
+    </div>
+    <div class="tablewrap" id="tbl"></div>
+  </div>
+
+  <div class="callout navy" style="margin-top:16px" id="moral" hidden>
+    <p><strong>沒有治理的資料，AI 只會更快、更有自信地犯錯。</strong></p>
+    <p class="small">漏掉的學生，是因為 120 分、999 缺考代碼、空白成績把平均「墊高」了；多出來的，是負分、已休學與已轉出的學生。問題不在 AI，而在資料本身。</p>
+  </div>
+</main>
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  const d = await W.json("s3.json");
+  const C = d.columns;
+  const SUBJ = ["國文", "英文", "數學"];
+  const rowsArr = (rows) => rows.map((r) => C.map((c) => r[c]));
+  const risk = (r) => {
+    const v = SUBJ.map((s) => r[s]).filter((x) => typeof x === "number");
+    const avg = v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN;
+    return { avg, flag: avg < 60 || (r["本學期缺曠節數"] || 0) >= 15 };
+  };
+  // 依學號整理問題
+  const bySid = {};
+  d.issues.forEach((it) => (bySid[it.學號] = bySid[it.學號] || []).push(it));
+
+  let stage = 0, dirtyList = [], cleanList = [];
+  const marks = [];
+  d.dirty.forEach((r, i) => {
+    const seen = d.dirty.findIndex((x) => x.學號 === r.學號) !== i;
+    if (seen) marks.push({ r: i, c: -1, k: "dup", n: "同一學號第二次出現" });
+    (bySid[r.學號] || []).forEach((it) => {
+      if (it.欄位 === "（整列）") return;
+      const c = C.indexOf(it.欄位);
+      if (c >= 0) marks.push({ r: i, c, k: "absent", n: `${it.面向}｜${it.問題}` });
+    });
+  });
+
+  function draw() {
+    const flagged = new Set(stage >= 1 ? dirtyList.map((x) => x.i) : []);
+    W.table(W.$("#tbl"), C, rowsArr(d.dirty), {
+      rowNum: 2, marks: stage >= 2 ? marks : [],
+      rowClass: (i) => (flagged.has(i) ? "hl" : ""),
+    });
+  }
+  function stat(cls, n, label) { return W.el("div", { class: "card stat " + cls }, W.el("b", {}, n), W.el("span", {}, label)); }
+
+  W.$("#b1").onclick = () => {
+    stage = Math.max(stage, 1);
+    dirtyList = d.dirty.map((r, i) => ({ r, i, ...risk(r) })).filter((x) => x.flag);
+    const uniq = new Set(dirtyList.map((x) => x.r.學號));
+    W.$("#stats").replaceChildren(
+      stat("orange", dirtyList.length, "名單列數（直接算）"),
+      stat("", uniq.size, "實際不重複的學生"),
+      stat("", d.dirty.length, "資料列數"),
+      stat("", new Set(d.dirty.map((r) => r.學號)).size, "不重複學號"));
+    W.$("#b2").disabled = false;
+    draw();
+  };
+  W.$("#b2").onclick = () => {
+    stage = Math.max(stage, 2);
+    W.$("#legend").hidden = false;
+    W.$("#b3").disabled = false;
+    draw();
+    W.toast(`找到 ${d.issues.length} 個問題，滑過標色格子看說明`);
+  };
+  W.$("#b3").onclick = () => {
+    stage = 3;
+    cleanList = d.clean.filter((r) => r.學籍狀態 === "在學").map((r) => ({ r, ...risk(r) })).filter((x) => x.flag);
+    const A = new Set(dirtyList.map((x) => x.r.學號)), B = new Set(cleanList.map((x) => x.r.學號));
+    const both = [...B].filter((s) => A.has(s)), fp = [...A].filter((s) => !B.has(s)), fn = [...B].filter((s) => !A.has(s));
+    const why = (s) => (bySid[s] || []).map((it) => it.問題).join("；") || "—";
+    const list = (title, cls, ids, note) => W.el("div", {},
+      W.el("h3", {}, W.el("span", { class: "chip " + cls }, ids.length + " 人"), " ", title),
+      W.el("p", { class: "small muted" }, note),
+      W.el("ul", { class: "small" }, ids.map((s) => W.el("li", {}, W.el("strong", {}, s), "　", W.el("span", { class: "muted" }, why(s))))));
+    W.$("#cmp").replaceChildren(
+      list("兩份名單都有", "green", both, "這些學生的資料沒問題，或問題不影響結果。"),
+      list("只在髒資料名單：誤報", "orange", fp, "不該被列入，卻被列入了。"),
+      list("只在乾淨資料名單：漏掉", "purple", fn, "真正需要關注，卻被漏掉了。"));
+    W.$("#cmpCard").hidden = false;
+    W.$("#moral").hidden = false;
+    W.$("#stats").append(stat("green", cleanList.length, "乾淨資料的名單人數"));
+    while (W.$("#stats").children.length > 4) W.$("#stats").children[2].remove();
+    W.$("#cmpCard").scrollIntoView({ behavior: "smooth" });
+  };
+  W.$("#copyPrompt").onclick = () => {
+    const csv = [C.join(",")].concat(d.dirty.map((r) => C.map((c) => r[c] ?? "").join(","))).join("\n");
+    W.copy("以下是某高中 113-1 學期的學生學習資料（CSV）。請找出「學習落後風險」學生：國文、英文、數學三科平均低於 60 分，或本學期缺曠 15 節以上。請列出學號與理由。\n\n" + csv,
+      "已複製，貼到 AI 對話試試看");
+  };
+  draw();
+});
+</script>
+</body>
+</html>

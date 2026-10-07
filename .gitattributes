@@ -1,0 +1,8 @@
+* text=auto eol=lf
+# 練習資料必須保持原始位元組（Big5 編碼、CRLF、刻意留下的尾端空白）
+*.csv -text
+*.m -text
+*.xlsx binary
+*.docx binary
+*.pdf binary
+*.png binary

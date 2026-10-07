@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>案例一</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script src="../assets/js/common.js"></script>
+<style>
+  .lv { display: grid; grid-template-columns: 70px 1fr 54px; gap: 8px; align-items: center; margin: 6px 0; font-size: .9rem; }
+  .lv output { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+  .decomp { display: flex; height: 44px; border-radius: 8px; overflow: hidden; margin: 8px 0; font-size: .82rem; color: #fff; font-weight: 700; }
+  .decomp div { display: flex; align-items: center; justify-content: center; white-space: nowrap; overflow: hidden; transition: flex-basis .3s; }
+</style>
+</head>
+<body data-root="../" data-lab="s0/strata" data-time="約 8 分鐘"
+      data-lead="高一數學不及格率由 26% 升到 40%。是「這屆比較差」，還是同程度的學生也退步了？用分層比較把兩件事分開。（示意數據）">
+<main class="wrap">
+  <div class="row" style="margin-bottom:12px">
+    <span class="small muted">情境：</span>
+    <div class="seg" id="preset">
+      <button data-p="case" aria-pressed="true">案例數據</button>
+      <button data-p="mix">只有生源變差</button>
+      <button data-p="teach">只有同等級退步</button>
+      <button data-p="same">什麼都沒變</button>
+    </div>
+  </div>
+  <div class="grid g3">
+    <div class="card">
+      <h3>今年的新生組成（%）</h3>
+      <p class="small muted">去年：A 35%、B 45%、C 20%</p>
+      <div id="mix"></div>
+      <h3 style="margin-top:16px">今年各等級的不及格率（%）</h3>
+      <p class="small muted">去年：A 5%、B 25%、C 65%</p>
+      <div id="fail"></div>
+    </div>
+    <div class="card" style="grid-column: span 2">
+      <div class="grid g3" id="stats"></div>
+      <h3 style="margin-top:16px">上升的部分從哪裡來</h3>
+      <div class="decomp" id="decomp"></div>
+      <p class="small" id="explain"></p>
+      <div style="height:240px;margin-top:8px"><canvas id="ch"></canvas></div>
+    </div>
+  </div>
+  <div class="callout purple" style="margin-top:16px">
+    <p><strong>分層比較：先把組成的差異拿掉，再比較同一群人。</strong></p>
+    <p class="small">「若只有生源改變」＝用今年的學生組成，乘上去年各等級的不及格率。實際值比它高出的部分，就是同等級學生也退步了，要往命題、銜接單元、班級去下鑽。</p>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  W.chartDefaults();
+  const L = ["A 等級", "B 等級", "C 等級"];
+  const PREV_MIX = [35, 45, 20], PREV_FAIL = [5, 25, 65];
+  const PRESETS = { case: [[25, 45, 30], [10, 33, 75]], mix: [[25, 45, 30], [5, 25, 65]], teach: [[35, 45, 20], [10, 33, 75]], same: [[35, 45, 20], [5, 25, 65]] };
+  let mix = [...PRESETS.case[0]], fail = [...PRESETS.case[1]];
+  const ch = new Chart(W.$("#ch"), { type: "bar", data: { labels: L, datasets: [
+    { label: "去年不及格率", data: PREV_FAIL, backgroundColor: W.color.gray },
+    { label: "今年不及格率", data: fail, backgroundColor: W.color.orange }] },
+    options: { scales: { y: { min: 0, max: 100, ticks: { callback: (v) => v + "%" } } }, plugins: { legend: { position: "top" } } } });
+  function sliders() {
+    W.$("#mix").replaceChildren(...L.slice(0, 2).map((l, i) => W.el("div", { class: "lv" }, W.el("span", {}, l),
+      W.el("input", { type: "range", min: 0, max: 80, value: mix[i], oninput: (e) => { mix[i] = +e.target.value; if (mix[0] + mix[1] > 100) mix[1 - i] = 100 - mix[i]; mix[2] = 100 - mix[0] - mix[1]; free(); upd(); } }),
+      W.el("output", {}, mix[i] + "%"))),
+      W.el("div", { class: "lv" }, W.el("span", {}, L[2]), W.el("span", { class: "small muted" }, "＝ 100% − A − B"), W.el("output", { id: "c" }, mix[2] + "%")));
+    W.$("#fail").replaceChildren(...L.map((l, i) => W.el("div", { class: "lv" }, W.el("span", {}, l),
+      W.el("input", { type: "range", min: 0, max: 100, value: fail[i], oninput: (e) => { fail[i] = +e.target.value; free(); upd(); } }),
+      W.el("output", {}, fail[i] + "%"))));
+  }
+  function free() { W.$$("#preset button").forEach((b) => b.setAttribute("aria-pressed", "false")); }
+  function upd() {
+    W.$$("#mix output").forEach((o, i) => (o.textContent = mix[i] + "%"));
+    W.$$("#fail output").forEach((o, i) => (o.textContent = fail[i] + "%"));
+    W.$$("#mix input").forEach((o, i) => (o.value = mix[i]));
+    const dot = (a, b) => a.reduce((s, x, i) => s + x * b[i], 0) / 100;
+    const prev = dot(PREV_MIX, PREV_FAIL), now = dot(mix, fail), cf = dot(mix, PREV_FAIL);
+    const dMix = cf - prev, dPerf = now - cf;
+    const stat = (cls, n, l) => W.el("div", { class: "stat " + cls }, W.el("b", {}, n), W.el("span", {}, l));
+    W.$("#stats").replaceChildren(stat("", `${prev.toFixed(0)}% → ${now.toFixed(0)}%`, "整體不及格率"),
+      stat("gold", cf.toFixed(0) + "%", "若只有生源改變"), stat("orange", (dPerf >= 0 ? "+" : "") + dPerf.toFixed(1), "同等級學生的變化（百分點）"));
+    const tot = Math.abs(dMix) + Math.abs(dPerf) || 1;
+    W.$("#decomp").replaceChildren(
+      W.el("div", { style: `flex-basis:${(Math.abs(dMix) / tot) * 100}%;background:#C9A227` }, Math.abs(dMix) >= 1 ? `生源 ${dMix >= 0 ? "+" : ""}${dMix.toFixed(1)}` : ""),
+      W.el("div", { style: `flex-basis:${(Math.abs(dPerf) / tot) * 100}%;background:#D85A30` }, Math.abs(dPerf) >= 1 ? `同等級 ${dPerf >= 0 ? "+" : ""}${dPerf.toFixed(1)}` : ""));
+    const share = tot > 0.05 ? Math.round((Math.abs(dMix) / tot) * 100) : 0;
+    W.$("#explain").innerHTML = Math.abs(now - prev) < 0.5 ? "整體沒有變化。" :
+      `整體變化 ${(now - prev).toFixed(1)} 個百分點：<strong>生源約占 ${share}%</strong>，同等級學生的表現變化約占 ${100 - share}%。` +
+      (Math.abs(dPerf) >= 2 ? "「這屆比較差」只說對了一部分，只開銜接課程不夠。" : "主要是生源改變，銜接課程是合理的第一步。");
+    ch.data.datasets[1].data = [...fail]; ch.update();
+  }
+  W.$$("#preset button").forEach((b) => (b.onclick = () => {
+    [mix, fail] = PRESETS[b.dataset.p].map((a) => [...a]);
+    W.$$("#preset button").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+    sliders(); upd();
+  }));
+  sliders(); upd();
+});
+</script>
+</body>
+</html>

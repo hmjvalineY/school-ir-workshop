@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>校務研究研習・互動實作</title>
+<meta name="description" content="高中校務研究研習的互動實作、實驗、示範與練習資料下載。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/site.css">
+<script src="assets/js/common.js"></script>
+</head>
+<body data-root="" data-crumb="首頁">
+<section class="hero">
+  <div class="wrap">
+    <h1>簡報講觀念，這裡動手做</h1>
+    <p>高中校務研究系列研習的互動網頁。遇到實作、操作、實驗、示範時，從簡報上的連結或 QR Code 進來；練習用的髒資料、對照表與解答都可以在「下載資料」取得。</p>
+    <div class="row" style="margin-top:14px">
+      <a class="btn orange" href="downloads.html">下載全部練習資料</a>
+      <a class="btn ghost" href="#guide">講師使用說明</a>
+    </div>
+  </div>
+</section>
+<main class="wrap" id="sessions"></main>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const main = W.$("#sessions");
+  const KIND_HINT = { "實作": "學員自己動手", "操作": "跟著畫面一起點", "實驗": "改變參數看結果", "示範": "講師示範、學員看邏輯" };
+  W.SESSIONS.forEach((s) => {
+    const sec = W.el("section", { class: "session", id: s.id },
+      W.el("header", {},
+        W.el("span", { class: "chip slide" }, s.no),
+        W.el("h2", {}, s.name),
+        W.el("a", { class: "small", href: "downloads.html#" + s.id }, "本場資料下載 →")),
+      W.el("p", { class: "muted", style: "margin-top:-4px" }, s.lead),
+      W.el("div", { class: "grid g3" }, s.labs.map((l) =>
+        W.el("a", { class: "labcard", href: l.id + ".html", target: l.external ? "_blank" : null },
+          W.el("div", { class: "row" },
+            W.el("span", { class: "chip k-" + l.kind, title: KIND_HINT[l.kind] }, l.kind),
+            W.el("span", { class: "chip slide" }, l.slides)),
+          W.el("h3", {}, l.title),
+          W.el("p", {}, l.desc)))));
+    main.append(sec);
+  });
+  main.append(W.el("section", { class: "session", id: "guide" },
+    W.el("header", {}, W.el("h2", {}, "講師使用說明")),
+    W.el("div", { class: "grid g3" },
+      W.el("div", { class: "card stack" },
+        W.el("h3", {}, "和簡報搭配"),
+        W.el("p", { class: "small" }, "每個實作頁的標題下方都標示「簡報：第 N 張」。簡報的「互動連結版」在對應頁面放了連結與 QR Code，點一下或掃一下就到這裡。"),
+        W.el("p", { class: "small" }, "講完回到 PowerPoint，用 Alt + Tab 切換即可。")),
+      W.el("div", { class: "card stack" },
+        W.el("h3", {}, "投影時"),
+        W.el("p", { class: "small", html: "按 <span class='kbd'>P</span> 開啟投影模式放大字級；<span class='kbd'>F</span> 全螢幕；<span class='kbd'>← →</span> 切換同一場的上／下一個實作。" }),
+        W.el("p", { class: "small", html: "要讓學員自己操作時，按 <span class='kbd'>Q</span> 投出本頁的 QR Code。" })),
+      W.el("div", { class: "card stack" },
+        W.el("h3", {}, "資料與隱私"),
+        W.el("p", { class: "small" }, "網頁上的資料全部在瀏覽器裡運算，不會上傳到任何地方；資料字典頁上傳的檔案也只在本機讀取。"),
+        W.el("p", { class: "small" }, "所有練習資料皆為模擬資料，姓名已遮罩，不含任何真實學生個資。")))));
+});
+</script>
+</body>
+</html>
