@@ -32,7 +32,7 @@ document.addEventListener("DOMContentLoaded", () => {
       W.el("header", {},
         W.el("span", { class: "chip slide" }, s.no),
         W.el("h2", {}, s.name),
-        W.el("a", { class: "small", href: "downloads.html#" + s.id }, "本場資料下載 →")),
+        W.el("a", { class: "small", href: "downloads.html#" + s.id }, "本課程資料下載 →")),
       W.el("p", { class: "muted", style: "margin-top:-4px" }, s.lead),
       W.el("div", { class: "grid g3" }, s.labs.map((l) =>
         W.el("a", { class: "labcard", href: l.id + ".html", target: l.external ? "_blank" : null },
@@ -52,7 +52,7 @@ document.addEventListener("DOMContentLoaded", () => {
         W.el("p", { class: "small" }, "講完回到 PowerPoint，用 Alt + Tab 切換即可。")),
       W.el("div", { class: "card stack" },
         W.el("h3", {}, "投影時"),
-        W.el("p", { class: "small", html: "按 <span class='kbd'>P</span> 開啟投影模式放大字級；<span class='kbd'>F</span> 全螢幕；<span class='kbd'>← →</span> 切換同一場的上／下一個實作。" }),
+        W.el("p", { class: "small", html: "按 <span class='kbd'>P</span> 開啟投影模式放大字級；<span class='kbd'>F</span> 全螢幕；<span class='kbd'>← →</span> 切換同一門課的上／下一個實作。" }),
         W.el("p", { class: "small", html: "要讓學員自己操作時，按 <span class='kbd'>Q</span> 投出本頁的 QR Code。" })),
       W.el("div", { class: "card stack" },
         W.el("h3", {}, "資料與隱私"),

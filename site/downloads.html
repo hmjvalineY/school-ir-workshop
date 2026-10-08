@@ -13,7 +13,7 @@
 <body data-root="" data-crumb="下載資料">
 <section class="labhead"><div class="wrap">
   <h1>下載練習資料</h1>
-  <p class="lead">壓縮檔請先「解壓縮到資料夾」再開啟——第二場的「從資料夾匯入」練習，在壓縮檔裡直接開會失敗。解答需要輸入簡報上的 6 碼密碼。所有資料皆為模擬資料。</p>
+  <p class="lead">壓縮檔請先「解壓縮到資料夾」再開啟——校務資料統整平台的「從資料夾匯入」練習，在壓縮檔裡直接開會失敗。解答需要輸入簡報上的 6 碼密碼。所有資料皆為模擬資料。</p>
 </div></section>
 <main class="wrap" id="dl"><p class="muted">載入中…</p></main>
 <script>
@@ -72,7 +72,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (s.id === "s2" && m.practice) {
       sec.append(W.el("div", { class: "card", style: "margin-top:16px" },
         W.el("h3", {}, "練習資料（單檔）"),
-        W.el("p", { class: "small muted" }, "只想看其中一個檔時用；正式練習請下載上方的「第二場_練習資料.zip」，資料夾結構才會正確。"),
+        W.el("p", { class: "small muted" }, "只想看其中一個檔時用；正式練習請下載上方的「校務資料統整平台_練習資料.zip」，資料夾結構才會正確。"),
         W.el("ul", { class: "small" }, m.practice.map((f) => W.el("li", {}, W.el("a", { href: encodeURI(f.href), download: "" }, f.name), " ", W.el("span", { class: "faint" }, W.bytes(f.size)))))));
     }
     main.append(sec);

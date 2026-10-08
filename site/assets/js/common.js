@@ -7,7 +7,7 @@
 
   const SESSIONS = [
     {
-      id: "s1", no: "第一場", name: "數據驅動的學校進化", deck: "數據驅動的學校進化_研習簡報",
+      id: "s1", no: "課程", name: "數據驅動的學校進化", deck: "數據驅動的學校進化_研習簡報",
       lead: "觀念建立、Excel Power Query 資料整理、視覺化與判讀。",
       labs: [
         { id: "s1/powerquery", kind: "示範", title: "Power Query 兩個關鍵動作：逆透視與合併", slides: "第 23–30 張",
@@ -25,7 +25,7 @@
       ],
     },
     {
-      id: "s2", no: "第二場", name: "校務資料統整平台", deck: "校務資料統整平台_研習簡報",
+      id: "s2", no: "課程", name: "校務資料統整平台", deck: "校務資料統整平台_研習簡報",
       lead: "五個系統的匯出檔，清洗、對照、檢核成一張整合表，再讓它自己更新。",
       labs: [
         { id: "s2/gallery", kind: "操作", title: "髒資料圖鑑：每個檔案都有它的問題", slides: "第 31 張",
@@ -41,7 +41,7 @@
       ],
     },
     {
-      id: "s0", no: "第三場・開場", name: "高中校務 50 問", deck: "開場模組_高中校務50問",
+      id: "s0", no: "開場模組", name: "高中校務 50 問", deck: "開場模組_高中校務50問",
       lead: "學校每天都在面對的 50 個問題：該看什麼數據、怎麼看、怎麼找到根因。",
       labs: [
         { id: "s0/questions", kind: "操作", title: "50 問瀏覽器", slides: "開場模組 第 4–16 張",
@@ -55,7 +55,7 @@
       ],
     },
     {
-      id: "s3", no: "第三場", name: "數據治理與高中校務研究", deck: "數據治理與高中校務研究",
+      id: "s3", no: "課程", name: "數據治理與高中校務研究", deck: "數據治理與高中校務研究",
       lead: "從數據整理、預警到決策的循環；所有小操作都只用模擬資料。",
       labs: [
         { id: "s3/experiment", kind: "實驗", title: "開場實驗：把髒資料直接丟給 AI", slides: "第 3 張",
@@ -218,7 +218,7 @@
     const top = W.el("header", { class: "topbar" },
       W.el("div", { class: "wrap" },
         W.el("a", { class: "brand", href: W.root + "index.html" }, "校務研究研習", W.el("span", {}, "・互動實作")),
-        W.el("div", { class: "crumb" }, sess ? `${sess.no}｜${sess.name}` : (b.dataset.crumb || "")),
+        W.el("div", { class: "crumb" }, sess ? sess.name : (b.dataset.crumb || "")),
         W.el("div", { class: "tools" },
           W.el("a", { class: "tbtn", href: W.root + "downloads.html" + (sess ? "#" + sess.id : ""), title: "下載練習資料" }, "下載資料"),
           W.el("button", { class: "tbtn", id: "btnQR", title: "顯示本頁 QR Code（快速鍵 Q）", onclick: openQR }, "QR"),
@@ -245,7 +245,7 @@
       const nav = W.el("nav", { class: "labnav wrap" },
         prev ? W.el("a", { href: W.root + prev.id + ".html" }, W.el("small", {}, "← 上一個"), prev.title) : W.el("span"),
         next ? W.el("a", { href: W.root + next.id + ".html", style: "text-align:right" }, W.el("small", {}, "下一個 →"), next.title)
-          : W.el("a", { href: W.root + "index.html#" + sess.id, style: "text-align:right" }, W.el("small", {}, "回到"), sess.no + " 全部實作"));
+          : W.el("a", { href: W.root + "index.html#" + sess.id, style: "text-align:right" }, W.el("small", {}, "回到"), "「" + sess.name + "」全部實作"));
       main.after(nav);
       document.title = lab.title + "｜校務研究研習互動實作";
       W.prevHref = prev && W.root + prev.id + ".html";

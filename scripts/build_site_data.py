@@ -4,7 +4,7 @@
 輸出（皆為建置產物，不進版控）：
   site/data/s0.json s1.json s2.json s3.json downloads.json
   site/downloads/…            個別檔案
-  site/downloads/*.zip        各場次打包
+  site/downloads/*.zip        各課程打包
 GitHub Actions 每次部署前都會執行；本機預覽前也請先執行一次：
   python scripts/build_site_data.py
 """
@@ -226,9 +226,9 @@ DESC = {
 }
 BUNDLES = [
     ("s0", "開場_高中校務50問.zip", [("s0/講義_高中校務50問_從現象數據到決策.pdf", None)]),
-    ("s1", "第一場_數據驅動的學校進化_全部素材.zip", [("s1", "")]),
-    ("s2", "第二場_練習資料.zip", [("s2/練習資料", "練習資料")]),
-    ("s3", "第三場_數據治理_練習資料.zip", [("s3/治理研習_髒資料_學生學習.xlsx", None), ("s3/治理研習_去識別化練習.xlsx", None)]),
+    ("s1", "數據驅動的學校進化_全部素材.zip", [("s1", "")]),
+    ("s2", "校務資料統整平台_練習資料.zip", [("s2/練習資料", "練習資料")]),
+    ("s3", "數據治理與高中校務研究_練習資料.zip", [("s3/治理研習_髒資料_學生學習.xlsx", None), ("s3/治理研習_去識別化練習.xlsx", None)]),
 ]
 SINGLES = {
     "s0": ["講義_高中校務50問_從現象數據到決策.pdf"],
@@ -240,9 +240,9 @@ SINGLES = {
 }
 BUNDLE_DESC = {
     "開場_高中校務50問.zip": "50 問講義",
-    "第一場_數據驅動的學校進化_全部素材.zip": "模擬資料、範例儀表板與講義 A–D",
-    "第二場_練習資料.zip": "五個系統的髒資料（保留資料夾結構，請解壓縮後再開啟）",
-    "第三場_數據治理_練習資料.zip": "髒資料與去識別化練習檔",
+    "數據驅動的學校進化_全部素材.zip": "模擬資料、範例儀表板與講義 A–D",
+    "校務資料統整平台_練習資料.zip": "五個系統的髒資料（保留資料夾結構，請解壓縮後再開啟）",
+    "數據治理與高中校務研究_練習資料.zip": "髒資料與去識別化練習檔",
 }
 
 
@@ -270,7 +270,7 @@ def build_downloads():
             shutil.copy2(MAT / sess / n, DL / sess / n)
             manifest["files"].setdefault(sess, []).append(
                 {"name": n, "href": f"downloads/{sess}/{n}", "size": (DL / sess / n).stat().st_size, "desc": DESC.get(n, "")})
-    # 第二場：個別練習檔也開放單獨下載（給只想看其中一個檔的人）
+    # 校務資料統整平台：個別練習檔也開放單獨下載（給只想看其中一個檔的人）
     (DL / "s2" / "練習資料").mkdir(parents=True, exist_ok=True)
     for f in sorted((MAT / "s2" / "練習資料").rglob("*")):
         if f.is_file():
