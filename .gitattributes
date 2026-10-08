@@ -6,3 +6,5 @@
 *.docx binary
 *.pdf binary
 *.png binary
+*.enc binary
+*.zip binary
