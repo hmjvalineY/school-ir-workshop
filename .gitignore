@@ -9,3 +9,6 @@ __pycache__/
 .DS_Store
 Thumbs.db
 ~$*
+
+# 解答原始檔（只留本機；網站上只放加密後的 .enc）
+private/

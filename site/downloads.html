@@ -13,7 +13,7 @@
 <body data-root="" data-crumb="下載資料">
 <section class="labhead"><div class="wrap">
   <h1>下載練習資料</h1>
-  <p class="lead">壓縮檔請先「解壓縮到資料夾」再開啟——第二場的「從資料夾匯入」練習，在壓縮檔裡直接開會失敗。所有資料皆為模擬資料。</p>
+  <p class="lead">壓縮檔請先「解壓縮到資料夾」再開啟——第二場的「從資料夾匯入」練習，在壓縮檔裡直接開會失敗。解答需要輸入簡報上的 6 碼密碼。所有資料皆為模擬資料。</p>
 </div></section>
 <main class="wrap" id="dl"><p class="muted">載入中…</p></main>
 <script>
@@ -26,6 +26,40 @@ document.addEventListener("DOMContentLoaded", async () => {
     W.el("a", { href: encodeURI(f.href), download: "", class: primary ? "btn sm orange" : "" }, f.name),
     W.el("span", { class: "small faint" }, "　" + W.bytes(f.size)),
     f.desc ? W.el("div", { class: "small muted" }, f.desc) : null);
+  // ---------- 加密解答：輸入 6 碼密碼，在瀏覽器裡解密後下載 ----------
+  const hex = (h) => new Uint8Array(h.match(/../g).map((x) => parseInt(x, 16)));
+  async function unlock(lk, pw) {
+    const enc = await (await fetch(encodeURI(lk.href))).arrayBuffer();
+    const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]);
+    const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: hex(lk.salt), iterations: lk.iter, hash: "SHA-256" },
+      base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+    return crypto.subtle.decrypt({ name: "AES-GCM", iv: hex(lk.iv) }, key, enc);
+  }
+  function lockCard(lk) {
+    const input = W.el("input", { type: "text", inputmode: "numeric", maxlength: "6", placeholder: "6 碼數字", autocomplete: "off",
+      style: "width:9em;font-size:1.2rem;letter-spacing:.25em;text-align:center;font-family:var(--mono)" });
+    const msg = W.el("span", { class: "small" });
+    const btn = W.el("button", { class: "btn orange" }, "解鎖並下載");
+    const go = async () => {
+      const pw = input.value.trim();
+      if (!/^\d{6}$/.test(pw)) { msg.textContent = "請輸入 6 碼數字"; msg.style.color = "var(--orange)"; return; }
+      btn.disabled = true; msg.textContent = "解密中…"; msg.style.color = "";
+      try {
+        const data = await unlock(lk, pw);
+        const a = W.el("a", { href: URL.createObjectURL(new Blob([data], { type: "application/zip" })), download: lk.name });
+        document.body.append(a); a.click(); a.remove();
+        msg.textContent = "✓ 已下載 " + lk.name; msg.style.color = "var(--green)";
+      } catch (e) { msg.textContent = "密碼不正確，請看簡報上的解答密碼頁"; msg.style.color = "var(--orange)"; }
+      btn.disabled = false;
+    };
+    btn.onclick = go;
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+    return W.el("div", { class: "card", id: lk.session + "-answers", style: "margin-top:16px;border:2px dashed var(--orange)" },
+      W.el("h3", {}, "🔒 解答：" + lk.name),
+      W.el("p", { class: "small muted" }, lk.desc + "。請先完成練習，再輸入簡報上的 6 碼密碼下載（" + W.bytes(lk.size) + "）。"),
+      W.el("div", { class: "row" }, input, btn, msg));
+  }
+
   W.SESSIONS.forEach((s) => {
     const bundles = m.bundles[s.id] || [], files = m.files[s.id] || [];
     if (!bundles.length && !files.length) return;
@@ -34,6 +68,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       W.el("div", { class: "grid g2" },
         W.el("div", { class: "card" }, W.el("h3", {}, "打包下載"), W.el("ul", { style: "list-style:none;padding:0;margin:0" }, bundles.map((f) => item(f, true)))),
         W.el("div", { class: "card" }, W.el("h3", {}, "個別檔案"), W.el("ul", { style: "list-style:none;padding:0;margin:0" }, files.map((f) => item(f))))));
+    (m.locked || []).filter((x) => x.session === s.id).forEach((lk) => sec.append(lockCard(lk)));
     if (s.id === "s2" && m.practice) {
       sec.append(W.el("div", { class: "card", style: "margin-top:16px" },
         W.el("h3", {}, "練習資料（單檔）"),
@@ -42,7 +77,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     main.append(sec);
   });
-  if (location.hash) { const t = document.getElementById(location.hash.slice(1)); if (t) t.scrollIntoView(); }
+  if (location.hash) { const t = document.getElementById(location.hash.slice(1)); if (t) { t.scrollIntoView(); const i = t.querySelector("input"); if (i) i.focus(); } }
 });
 </script>
 </body>

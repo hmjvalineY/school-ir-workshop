@@ -1,0 +1,22 @@
+[
+ {
+  "session": "s2",
+  "name": "第二場_解答.zip",
+  "desc": "標準答案、Power Query 完成版與 12 段 M 公式",
+  "file": "第二場_解答.zip.enc",
+  "size": 197823,
+  "salt": "dfe8049c35b4effad7bd56654da09926",
+  "iv": "df84b499609633fffdd178fe",
+  "iter": 200000
+ },
+ {
+  "session": "s3",
+  "name": "第三場_數據治理_解答.zip",
+  "desc": "21 個問題的列號、面向與處理建議，附乾淨版本",
+  "file": "第三場_數據治理_解答.zip.enc",
+  "size": 10166,
+  "salt": "327982c8c094fed7220579217d9428ff",
+  "iv": "02e61892160a39034a25711a",
+  "iter": 200000
+ }
+]

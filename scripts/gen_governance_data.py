@@ -4,7 +4,7 @@
 全部為模擬資料（姓名遮罩、無真實個資）。固定亂數種子，每次產生結果相同。
 輸出到 materials/s3/：
   治理研習_髒資料_學生學習.xlsx      —— 學員下載練習用（開場實驗、小操作一、二）
-  治理研習_解答_問題清單.xlsx        —— 講師／自學對答案用
+  private/s3/治理研習_解答_問題清單.xlsx —— 解答（不進版控，由 lock_answers.py 加密）
   治理研習_去識別化練習.xlsx          —— 小操作三
 """
 import json
@@ -118,7 +118,9 @@ def write(path, sheets):
 
 write(OUT / "治理研習_髒資料_學生學習.xlsx", [("學生學習資料", COLS, rows)])
 IK = ["Excel列", "學號", "欄位", "髒值", "正確值", "問題", "面向", "處理建議"]
-write(OUT / "治理研習_解答_問題清單.xlsx", [("問題清單", IK, issues), ("乾淨版本", COLS, clean)])
+PRIV = ROOT / "private" / "s3"          # 解答不進版控，由 lock_answers.py 加密後才上網站
+PRIV.mkdir(parents=True, exist_ok=True)
+write(PRIV / "治理研習_解答_問題清單.xlsx", [("問題清單", IK, issues), ("乾淨版本", COLS, clean)])
 
 # 去識別化練習（姓名為示意用常見假名）
 FAKE = ["王小明", "陳大華", "林美玲", "張志豪", "李佳穎", "黃建宏", "吳宜蓁", "劉冠廷", "蔡雅婷", "楊承恩"]

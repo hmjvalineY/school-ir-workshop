@@ -40,17 +40,28 @@
 - 快速鍵：`P` 投影模式（放大字級）、`Q` 顯示本頁 QR Code 給學員掃、`F` 全螢幕、`← →` 同一場的上／下一個實作。
 - 學員要自己操作時，按 `Q` 投出 QR Code；資料下載頁有每一場的打包檔。
 
+## 解答密碼（上課用的輕度保護）
+
+解答不以明文放在網站或 repo 裡：`scripts/lock_answers.py` 把 `private/`（不進版控）裡的解答打包、用 6 碼數字密碼加密（PBKDF2 ＋ AES-GCM），只把 `.enc` 放上網站。學員在「下載資料」頁輸入密碼，檔案在瀏覽器裡解密後下載。密碼寫在簡報「互動連結版」提到解答的那一頁之後。
+
+> 這只是讓教學可以照順序進行的輕度保護：6 碼數字可以被暴力破解，請勿用來保護真正需要保密的資料。
+
+更換密碼：`python scripts/lock_answers.py --new`，再重跑簡報資料夾的 `add_lab_links.py` 更新密碼頁。
+
 ## 專案結構
 
 ```
 materials/            研習素材（下載檔的來源，版控）
   s0/  開場 50 問：講義 PDF、50 題資料
   s1/  第一場：模擬校務資料、講義 A–D、範例儀表板
-  s2/  第二場：練習資料（五個系統的髒資料）、解答、講義 E–F
-  s3/  第三場：治理研習髒資料、去識別化練習、解答（由 gen_governance_data.py 產生）
+  s2/  第二場：練習資料（五個系統的髒資料）、講義 E–F
+  s3/  第三場：治理研習髒資料、去識別化練習（由 gen_governance_data.py 產生）
+  locked/  加密後的解答（*.zip.enc）與解密參數 locked.json
+private/              解答原始檔與密碼（不進版控，只在講師電腦）
 scripts/
   build_site_data.py      materials → site/data/*.json ＋ site/downloads/（打包 zip）
   gen_governance_data.py  產生第三場的練習資料（固定亂數種子）
+  lock_answers.py         把 private/ 的解答加密成 materials/locked/
   check_site.py           部署前檢查連結與目錄
 site/                 靜態網站（GitHub Pages 發布的內容）
   index.html  downloads.html

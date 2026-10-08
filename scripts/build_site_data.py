@@ -198,7 +198,7 @@ def build_s2():
                   "summary": ["學號由學生手打：全形、橫線、S 開頭、前後空白、少打一碼", "同一人同一活動重複提交", "姓名的「O」有三種寫法"],
                   "rows": rows, "marks": marks})
 
-    answers = json.load(open(MAT / "s2" / "解答" / "answers.json", encoding="utf-8"))
+    answers = json.load(open(MAT / "s2" / "answers.json", encoding="utf-8"))
     jdump({"files": files, "answers": answers}, "s2.json")
 
 
@@ -223,15 +223,12 @@ DESC = {
     "高中校務研究資料盤點清冊.docx": "11 大類、62 項高中校務研究資料的完整清冊",
     "治理研習_髒資料_學生學習.xlsx": "開場實驗與小操作用：58 列學生學習資料，藏了 21 個問題",
     "治理研習_去識別化練習.xlsx": "小操作三：10 位（虛構）學生的原始資料，練習假名化、概化、遮罩",
-    "治理研習_解答_問題清單.xlsx": "21 個問題的列號、面向與處理建議，附乾淨版本",
 }
 BUNDLES = [
     ("s0", "開場_高中校務50問.zip", [("s0/講義_高中校務50問_從現象數據到決策.pdf", None)]),
     ("s1", "第一場_數據驅動的學校進化_全部素材.zip", [("s1", "")]),
     ("s2", "第二場_練習資料.zip", [("s2/練習資料", "練習資料")]),
-    ("s2", "第二場_解答.zip", [("s2/解答", "解答")]),
     ("s3", "第三場_數據治理_練習資料.zip", [("s3/治理研習_髒資料_學生學習.xlsx", None), ("s3/治理研習_去識別化練習.xlsx", None)]),
-    ("s3", "第三場_數據治理_解答.zip", [("s3/治理研習_解答_問題清單.xlsx", None)]),
 ]
 SINGLES = {
     "s0": ["講義_高中校務50問_從現象數據到決策.pdf"],
@@ -239,15 +236,13 @@ SINGLES = {
            "講義B_Google_Data_Studio_逐步操作.pdf", "講義C_Power_BI_Desktop_逐步操作.pdf", "講義D_AI自製校務研究系統_逐步操作.pdf"],
     "s2": ["講義E_多來源資料清洗與整合_逐步操作.pdf", "講義F_資料自動化取得與同步_逐步操作.pdf", "範本_資料盤點與治理.xlsx",
            "高中校務研究資料盤點清冊.docx"],
-    "s3": ["治理研習_髒資料_學生學習.xlsx", "治理研習_去識別化練習.xlsx", "治理研習_解答_問題清單.xlsx"],
+    "s3": ["治理研習_髒資料_學生學習.xlsx", "治理研習_去識別化練習.xlsx"],
 }
 BUNDLE_DESC = {
     "開場_高中校務50問.zip": "50 問講義",
     "第一場_數據驅動的學校進化_全部素材.zip": "模擬資料、範例儀表板與講義 A–D",
     "第二場_練習資料.zip": "五個系統的髒資料（保留資料夾結構，請解壓縮後再開啟）",
-    "第二場_解答.zip": "標準答案、Power Query 完成版與 12 段 M 公式",
     "第三場_數據治理_練習資料.zip": "髒資料與去識別化練習檔",
-    "第三場_數據治理_解答.zip": "問題清單與乾淨版本",
 }
 
 
@@ -285,6 +280,15 @@ def build_downloads():
             shutil.copy2(f, dst)
             manifest.setdefault("practice", []).append(
                 {"name": str(rel).replace("\\", "／"), "href": f"downloads/s2/練習資料/{rel.as_posix()}", "size": f.stat().st_size})
+    # 加密的解答：只複製 .enc，下載頁輸入密碼後在瀏覽器解密
+    lk = MAT / "locked" / "locked.json"
+    if lk.exists():
+        (DL / "locked").mkdir(exist_ok=True)
+        locked = json.load(open(lk, encoding="utf-8"))
+        for it in locked:
+            shutil.copy2(MAT / "locked" / it["file"], DL / "locked" / it["file"])
+            it["href"] = f"downloads/locked/{it['file']}"
+        manifest["locked"] = locked
     # 範例儀表板也放一份在網站上直接開
     shutil.copy2(MAT / "s1" / "範例_AI自製校務研究儀表板.html", SITE / "s1" / "dashboard-example.html")
     jdump(manifest, "downloads.json")
